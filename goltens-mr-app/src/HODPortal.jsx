@@ -1,0 +1,312 @@
+import { useState, useEffect } from "react";
+import { listMRs } from "./api";
+import MRDetailView from "./MRDetailView";
+import MRForm from "./MRForm";
+import GoltensLogo from "./GoltensLogo";
+import { G } from "./theme";
+import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
+import FormSelectionModal from "./FormSelectionModal";
+import HelpChatbot from "./HelpChatbot";
+import { MANAGER_EMAIL, APPROVAL_SLAB } from "./App";
+
+async function call(action,data={}) {
+  const res=await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
+  if(!res.ok) throw new Error(`${res.status}`); return res.json();
+}
+
+function downloadMRPDF(mr) {
+  const win = window.open("","_blank");
+  win.document.write(`<html><head><title>MR ${mr.mr_id}</title>
+  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h2{color:#4a148c}
+  table{width:100%;border-collapse:collapse}th{background:#4a148c;color:#fff;padding:6px 8px;text-align:left}
+  td{padding:5px 8px;border-bottom:1px solid #eee}
+  .sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px;border-top:1px solid #ccc;padding-top:12px}
+  .sig-box{border:1px solid #ccc;padding:8px;border-radius:4px}.sig-title{font-weight:bold;margin-bottom:6px;font-size:11px;color:#4a148c}
+  </style></head><body>
+  <h2>Goltens Co. Ltd. Dubai Branch</h2><h3>Material Requisition — ${mr.mr_id}</h3>
+  <p><b>Vessel:</b> ${mr.vessel} &nbsp; <b>Dept:</b> ${mr.department||"—"} &nbsp; <b>Job:</b> ${mr.job_no} &nbsp; <b>Status:</b> ${mr.status?.replace(/_/g," ")}</p>
+  <table><thead><tr><th>S.N.</th><th>Item Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Activity Code</th><th>Est. Cost</th><th>Budgeted</th></tr></thead>
+  <tbody>${(mr.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${it.item_code}</td><td>${it.description}</td><td>${it.qty}</td><td>${it.uom}</td><td>${it.activity_code}</td><td>${it.estimated_cost}</td><td>${it.budgeted}</td></tr>`).join("")}</tbody></table>
+  <p><b>Total: AED ${parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</b></p>
+  <div class="sig-grid">
+    <div class="sig-box"><div class="sig-title">Requested By</div>${mr.submitted_by_name||"—"}</div>
+    <div class="sig-box"><div class="sig-title">Approved By</div>${mr.approved_by||mr.hod_approved_by||"—"}</div>
+    <div class="sig-box"><div class="sig-title">MR Received By</div>${mr.sc_received_by_name||"—"}</div>
+    <div class="sig-box"><div class="sig-title">Items Issued To</div>${mr.warehouse_issued_to_name||"—"}</div>
+  </div></body></html>`);
+  win.document.close(); win.print();
+}
+
+function Analytics({ mrs }) {
+  const projects = {};
+  mrs.forEach(mr => {
+    const key = mr.job_no || "Unassigned";
+    if(!projects[key]) projects[key]={job_no:key,count:0,total:0,pending:0,approved:0,rejected:0};
+    projects[key].count++;
+    projects[key].total += parseFloat(mr.total_cost||0);
+    if(["PENDING","PENDING_HOD"].includes(mr.status)) projects[key].pending++;
+    else if(mr.status==="APPROVED"||mr.status==="ISSUED") projects[key].approved++;
+    else if(mr.status==="REJECTED") projects[key].rejected++;
+  });
+  const list = Object.values(projects).sort((a,b)=>b.total-a.total);
+  const maxTotal = Math.max(...list.map(p=>p.total), 1);
+  const totalSpend = mrs.reduce((s,m)=>s+parseFloat(m.total_cost||0),0);
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+        {[["Total MRs",mrs.length,"#4a148c"],["Total Spend",`AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`,G.primary],
+          ["Approved",mrs.filter(m=>m.status==="APPROVED"||m.status==="ISSUED").length,G.success],
+          ["Pending HOD",mrs.filter(m=>m.status==="PENDING_HOD").length,"#7b1fa2"]
+        ].map(([l,v,c])=>(
+          <div key={l} style={{background:G.white,border:`1px solid ${G.paleBorder}`,borderRadius:8,padding:"14px 16px",textAlign:"center"}}>
+            <div style={{fontSize:20,fontWeight:700,color:c,marginBottom:4}}>{v}</div>
+            <div style={{fontSize:11,color:G.muted,fontWeight:600,textTransform:"uppercase"}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontWeight:700,fontSize:13,color:"#333",marginBottom:12,textTransform:"uppercase"}}>Spend by Project</div>
+      {list.map(p=>(
+        <div key={"Job No: " + p.job_no} style={{marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#4a148c",marginBottom:4}}>{"Job No: " + p.job_no}</div>
+          <div style={{background:G.pale,borderRadius:4,height:24,position:"relative",overflow:"visible"}}>
+            <div style={{background:"linear-gradient(90deg,#7b1fa2,#4a148c)",borderRadius:4,height:"100%",width:`${(p.total/maxTotal)*100}%`,minWidth:4}}/>
+            <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,fontWeight:600,color:"#4a148c"}}>AED {p.total.toLocaleString("en-AE",{minimumFractionDigits:0})}</span>
+          </div>
+          <div style={{display:"flex",gap:6,marginTop:4}}>
+            <span style={{background:"#f3e5f5",color:"#4a148c",borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:600}}>{p.count} MRs</span>
+            {p.pending>0&&<span style={{background:"#fff8e1",color:"#b8860b",borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:600}}>{p.pending} pending</span>}
+            {p.approved>0&&<span style={{background:"#e8f5e9",color:G.success,borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:600}}>{p.approved} approved</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function HODPortal({ session, onLogout }) {
+  const [view, setView]           = useState("queue");
+  const [mrs, setMrs]             = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [selected, setSelected]   = useState(null);
+  const [actionDone, setActionDone] = useState(null);
+  const [rejComment, setRejComment] = useState("");
+  const [rejectErr, setRejectErr]   = useState("");
+  const [actioning, setActioning]   = useState(false);
+  const [formFilter, setFormFilter] = useState("all");
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [selectedFormType, setSelectedFormType] = useState(null);
+
+  const loadMRs = async () => {
+    try { const d=await listMRs("ALL"); setMrs(Array.isArray(d)?d:[]); } catch(e){console.error(e);}
+    setLoading(false);
+  };
+
+  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,30000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ if(selected&&mrs.length>0){ const u=mrs.find(m=>m.mr_id===selected.mr_id); if(u)setSelected(u); } },[mrs]);
+
+  const filteredMRs = filterByFormType(mrs, formFilter);
+  const openMR = mr => { setSelected(mr); setActionDone(null); setRejComment(""); setRejectErr(""); };
+  const actor  = session.name||session.email;
+
+  const doApprove = async () => {
+    setActioning(true);
+    const r = await call("hod_approve_mr",{mr_id:selected.mr_id,approved_by:actor,comments:""});
+    if(r?.success!==false){ setActionDone("APPROVED"); loadMRs(); }
+    setActioning(false);
+  };
+  const doReject = async () => {
+    if(!rejComment.trim()){setRejectErr("Rejection reason is mandatory.");return;}
+    setActioning(true);
+    const r = await call("reject_mr",{mr_id:selected.mr_id,rejected_by:actor,reason:rejComment});
+    if(r?.success!==false){ setActionDone("REJECTED"); loadMRs(); }
+    setActioning(false);
+  };
+  const doRevert = async () => {
+    if(!window.confirm(`Revert MR ${selected.mr_id} back to PENDING?`)) return;
+    setActioning(true);
+    const r = await call("revert_mr",{mr_id:selected.mr_id,reverted_by:actor});
+    if(r?.success!==false){ setActionDone("REVERTED"); loadMRs(); }
+    setActioning(false);
+  };
+
+  const pendingHOD = filteredMRs.filter(m=>m.status==="PENDING_HOD");
+  const canAction  = selected?.status==="PENDING_HOD";
+  const canRevert  = ["APPROVED","REJECTED"].includes(selected?.status);
+
+  return (
+    <div style={s.page}>
+      <div style={s.shell}>
+        <div style={s.sidebar}>
+          <div style={s.sideHeader}><GoltensLogo size="sm" dark style={{flexShrink:0}}/></div>
+          <div style={s.portalLabel}>GM / HOD Portal</div>
+          <div style={s.sideSection}>NAVIGATION</div>
+          {[{key:"queue",label:"📋 Pending Approval"},{key:"analytics",label:"📊 Analytics"},{key:"all",label:"🔍 All MR Status"},{key:"submit",label:"➕ Submit New Form"}].map(({key,label})=>(
+            <div key={key} style={{...s.navItem,...(view===key?s.navItemActive:{})}} onClick={()=>{ if(key==="submit"){setShowFormModal(true);}else{setView(key);} }}>{label}</div>
+          ))}
+          <div style={{padding:"6px 12px"}}>
+            <FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="rgba(255,255,255,0.9)" compact/>
+          </div>
+          <div style={s.sideSection}>PENDING HOD ({pendingHOD.length})</div>
+          {loading&&<div style={s.sideLoading}>Loading…</div>}
+          {!loading&&pendingHOD.length===0&&<div style={s.sideLoading}>No MRs pending HOD approval.</div>}
+          {pendingHOD.map(mr=>(
+            <div key={mr.mr_id} style={{...s.mrCard,...(selected?.mr_id===mr.mr_id?s.mrCardActive:{})}} onClick={()=>{setView("queue");openMR(mr);}}>
+              <div style={s.mrCardTop}>
+                <div style={s.mrCardId}>{mr.mr_id}</div>
+                {mr.document_s3_keys?.length>0&&<div style={s.docBadge}>📎{mr.document_s3_keys.length}</div>}
+              </div>
+              <div style={s.mrCardMeta}>{mr.vessel} · {mr.submitted_by_name}</div>
+              <div style={{display:"inline-block",marginTop:5,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:"rgba(206,147,216,0.3)",color:"#e1bee7"}}>PENDING HOD</div>
+            </div>
+          ))}
+          <div style={s.sideFooter}>
+            <div style={s.pendingNote}>{pendingHOD.length} awaiting HOD approval</div>
+            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
+            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
+          </div>
+        </div>
+
+        <div style={s.main}>
+          {view==="analytics"&&(<div><div style={s.pageTitle}>Project Analytics</div><FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="#4a148c"/><Analytics mrs={filteredMRs}/></div>)}
+
+          {view==="all"&&(
+            <div>
+              <div style={s.pageTitle}>All MR Status</div>
+              <FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="#4a148c"/>
+              {filteredMRs.length===0?<div style={{color:"#aaa"}}>No MRs found.</div>:(
+                <table style={s.table}>
+                  <thead><tr>{["MR Number","Vessel","Dept","Job No.","Submitted By","Total (AED)","Status"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                  <tbody>{filteredMRs.map((mr,i)=>(
+                    <tr key={mr.mr_id} style={{...i%2===0?s.trEven:s.trOdd,cursor:"pointer"}} onClick={()=>{openMR(mr);setView("queue");}}>
+                      <td style={s.td}><strong>{mr.mr_id}</strong></td>
+                      <td style={s.td}>{mr.vessel}</td><td style={s.td}>{mr.department||"—"}</td>
+                      <td style={s.td}>{mr.job_no}</td><td style={s.td}>{mr.submitted_by_name}</td>
+                      <td style={s.td}>{parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+                      <td style={s.td}><span style={{borderRadius:10,padding:"2px 10px",fontSize:11,fontWeight:700,background:mr.status==="APPROVED"?"#e8f5e9":mr.status==="REJECTED"?"#fff5f5":mr.status==="PENDING_HOD"?"#f3e5f5":"#eaf1fb",color:mr.status==="APPROVED"?G.success:mr.status==="REJECTED"?G.danger:mr.status==="PENDING_HOD"?"#7b1fa2":G.primary}}>{mr.status?.replace("_"," ")}</span></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {view==="submit" && (
+            <div>
+              <div style={s.pageTitle}>
+                Submit New Form
+                <button style={{marginLeft:12,background:"#f0f0f0",border:"1px solid #ddd",borderRadius:5,padding:"4px 12px",fontSize:12,cursor:"pointer"}} onClick={()=>setShowFormModal(true)}>Change Form ▼</button>
+              </div>
+              {!selectedFormType ? (
+                <div style={{textAlign:"center",padding:60}}>
+                  <div style={{fontSize:48,marginBottom:16}}>📋</div>
+                  <div style={{fontSize:16,fontWeight:700,color:"#4a148c",marginBottom:8}}>Select a Form to Submit</div>
+                  <div style={{fontSize:13,color:G.muted,marginBottom:24}}>Click below to choose which form you want to fill.</div>
+                  <button style={{background:"linear-gradient(135deg,#7b1fa2,#4a148c)",color:"#fff",border:"none",borderRadius:6,padding:"12px 32px",fontSize:14,fontWeight:700,cursor:"pointer"}}
+                    onClick={()=>setShowFormModal(true)}>
+                    Choose Form →
+                  </button>
+                </div>
+              ) : selectedFormType==="material_requisition" ? (
+                <MRForm session={session} managerEmail={MANAGER_EMAIL} hodEmail={session.email} approvalSlab={APPROVAL_SLAB} formType={selectedFormType} onLogout={()=>setView("queue")} isEmbedded/>
+              ) : (
+                <div style={{textAlign:"center",padding:60,color:"#aaa"}}>
+                  <div style={{fontSize:48,marginBottom:16}}>🚧</div>
+                  <div style={{fontSize:15,fontWeight:600}}>Coming Soon</div>
+                  <div style={{fontSize:13,marginTop:8}}>This form is not yet available.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {view==="queue"&&(
+            !selected?(
+              <div style={s.emptyState}><div style={{fontSize:48,marginBottom:16}}>🏛️</div>
+              <div style={{fontSize:14,color:"#aaa"}}>{pendingHOD.length===0?"No MRs awaiting HOD approval.":"Select an MR from the sidebar to review."}</div></div>
+            ):(
+              <div>
+                <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRPDF(selected)} />
+                <div style={s.decisionPanel}>
+                  <div style={s.panelTitle}>HOD Decision</div>
+                  {canRevert&&(
+                    <div style={s.revertBlock}>
+                      <div style={s.revertLabel}>↩ MR is <strong>{selected.status?.replace("_"," ")}</strong>. Revert to PENDING to change your decision.</div>
+                      <button style={{...s.revertBtn,...(actioning?{opacity:0.7}:{})}} onClick={doRevert} disabled={actioning}>↩ Revert to Pending</button>
+                    </div>
+                  )}
+                  {canAction&&(<>
+                    <div style={s.rejectBlock}>
+                      <label style={s.rejectLabel}>Rejection Reason <span style={{fontWeight:400,color:G.danger,fontSize:11}}>* required if rejecting</span></label>
+                      <textarea style={{...s.textarea,...(rejectErr?{border:`1px solid ${G.danger}`}:{})}} rows={3} placeholder="Provide a clear reason..."
+                        value={rejComment} onChange={e=>{setRejComment(e.target.value);setRejectErr("");}}/>
+                      {rejectErr&&<span style={{color:G.danger,fontSize:11}}>{rejectErr}</span>}
+                    </div>
+                    <div style={{display:"flex",gap:12}}>
+                      <button style={{...s.approveBtn,...(actioning?{opacity:0.7}:{})}} onClick={doApprove} disabled={actioning}>✓ HOD Approve</button>
+                      <button style={{...s.rejectBtn,...(actioning?{opacity:0.7}:{})}} onClick={doReject} disabled={actioning}>✕ HOD Reject</button>
+                    </div>
+                  </>)}
+                  {!canAction&&!canRevert&&<div style={{color:"#aaa",fontSize:13}}>No actions available for this MR status.</div>}
+                  {actionDone&&(
+                    <div style={{marginTop:12,border:"1px solid",borderRadius:6,padding:"12px 16px",fontSize:13,display:"flex",justifyContent:"space-between",
+                      background:actionDone==="APPROVED"?"#e8f5e9":actionDone==="REJECTED"?"#fff5f5":"#fff8e1",
+                      borderColor:actionDone==="APPROVED"?"#a5d6a7":actionDone==="REJECTED"?"#f5c6c6":"#ffe082"}}>
+                      {actionDone==="REVERTED"?"↩ MR reverted to PENDING.":`✓ MR ${actionDone}. Submitter notified.`}
+                      <button style={{background:"none",border:"none",cursor:"pointer",color:"#888"}} onClick={()=>setActionDone(null)}>✕</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+      <HelpChatbot role="hod" userName={session?.name} userEmail={session?.email} />
+      {showFormModal && (
+        <FormSelectionModal
+          portalColor="#4a148c"
+          onClose={()=>setShowFormModal(false)}
+          onSelect={(formType)=>{ setSelectedFormType(formType); setShowFormModal(false); setView("submit"); }}
+        />
+      )}
+    </div>
+  );
+}
+
+const s = {
+  page:{minHeight:"100vh",background:"#f0f2f5",fontFamily:"'Segoe UI',Arial,sans-serif",fontSize:13},
+  shell:{display:"flex",minHeight:"100vh"},
+  sidebar:{width:260,background:"#4a148c",color:"#fff",display:"flex",flexDirection:"column",padding:"0 0 16px",flexShrink:0},
+  sideHeader:{padding:"20px 20px 8px",borderBottom:"1px solid rgba(255,255,255,0.15)"},
+  portalLabel:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:1,textTransform:"uppercase",padding:"8px 20px 12px"},
+  sideSection:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.45)",letterSpacing:1.5,padding:"10px 20px 6px"},
+  navItem:{margin:"2px 12px",padding:"9px 12px",borderRadius:6,cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.8)"},
+  navItemActive:{background:"rgba(255,255,255,0.2)",color:"#fff",fontWeight:600},
+  sideLoading:{fontSize:11,color:"rgba(255,255,255,0.4)",padding:"8px 20px"},
+  mrCard:{margin:"2px 12px",padding:"10px 12px",borderRadius:6,cursor:"pointer"},
+  mrCardActive:{background:"rgba(255,255,255,0.15)"},
+  mrCardTop:{display:"flex",justifyContent:"space-between",alignItems:"center"},
+  mrCardId:{fontWeight:700,fontSize:12,color:"#fff"},
+  docBadge:{fontSize:10,color:"rgba(255,255,255,0.7)",background:"rgba(255,255,255,0.15)",borderRadius:10,padding:"1px 7px"},
+  mrCardMeta:{fontSize:11,color:"rgba(255,255,255,0.65)",marginTop:3},
+  sideFooter:{marginTop:"auto",padding:"16px 20px 0",borderTop:"1px solid rgba(255,255,255,0.1)",display:"flex",flexDirection:"column",gap:8},
+  pendingNote:{fontSize:11,color:"rgba(255,255,255,0.5)"},
+  refreshBtn:{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
+  logoutBtn:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
+  main:{flex:1,padding:"28px 32px",overflowY:"auto"},
+  pageTitle:{fontWeight:700,fontSize:18,color:"#4a148c",marginBottom:20,paddingBottom:12,borderBottom:"2px solid #4a148c"},
+  emptyState:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh"},
+  table:{width:"100%",borderCollapse:"collapse",fontSize:12},
+  th:{background:"#4a148c",color:"#fff",padding:"8px 10px",textAlign:"left",fontWeight:600,fontSize:11},
+  trEven:{background:"#fff"},trOdd:{background:G.pale},
+  td:{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`,cursor:"pointer"},
+  decisionPanel:{background:"#fafbfc",border:`1px solid ${G.paleBorder}`,borderRadius:8,padding:"20px 24px",marginTop:16},
+  panelTitle:{fontWeight:700,fontSize:13,color:"#333",marginBottom:14,textTransform:"uppercase",letterSpacing:0.5},
+  revertBlock:{background:"#fff8e1",border:"1px solid #ffe082",borderRadius:6,padding:"12px 16px",marginBottom:16},
+  revertLabel:{fontSize:13,color:"#5d4037",marginBottom:10},
+  revertBtn:{background:"#f57f17",color:"#fff",border:"none",borderRadius:5,padding:"8px 20px",fontSize:12,fontWeight:700,cursor:"pointer"},
+  rejectBlock:{marginBottom:16},
+  rejectLabel:{display:"block",fontWeight:600,fontSize:12,color:"#333",marginBottom:6},
+  textarea:{width:"100%",border:`1px solid ${G.paleBorder}`,borderRadius:4,padding:"8px 10px",fontSize:13,resize:"vertical",outline:"none",boxSizing:"border-box"},
+  approveBtn:{background:"#1a7a4a",color:"#fff",border:"none",borderRadius:5,padding:"10px 28px",fontSize:13,fontWeight:700,cursor:"pointer"},
+  rejectBtn:{background:G.danger,color:"#fff",border:"none",borderRadius:5,padding:"10px 28px",fontSize:13,fontWeight:700,cursor:"pointer"},
+};

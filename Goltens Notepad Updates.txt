@@ -1,0 +1,39 @@
+Goltens:
+-------------------------------------------------------------------
+Role		Email					Password
+-------------------------------------------------------------------
+User		shashikanth.k@vcloudmaster.com		user123
+Manager		prapul.t@vcloudmaster.com		manager123
+GM/HOD		shashikanth.k@vcloudmaster.com		hod123
+Supply Chain	shashikanth.k@vcloudmaster.com		sc123
+
+-------------------------------------------------------------------
+Need to set the DynamoDB & SES
+
+1. Job No should be entered manually.
+2. Activity code should also be entered manually
+
+Need change
+1. When an user logins to his account the "requested by" field has to be filled automatically with the user details (the user details should be stored in DynamoDB).
+2. When the user submits the form it has to be send an email to user after his submission. Also the manager should be notified regarding the submission.
+3. The databases aren't created for this for any of the process or data to be stored for complete solution (It has to be stored in DynamoDB).
+4. In the manager portal if the product is not available in stock then he should have an option of selecting the unavailability of stock and will be issued and approved once they get it. And once he selects that and submit in the manager portal the status should be in process and should be notified to the user.
+5. For all the notification of emails, use either SES or SNS which ever is the best option.
+6. The supported documents should be stored in S3 bucket and should be able to view by the manager in his portal.
+7. After the manager approval or rejection a notification has to be sent to the user regarding the status.
+
+25.06.2026
+1. Need to ask the client whether they required login portal link in the email.
+2. Need to add approved, rejected and pending forms total count in the manager portal.
+3. Also need to add form to be submitted in the manager portal.
+
+26.06.2026
+1. Need to add department field in the user form and it has to be entered manually. Also the vessels should be entered manually rather than drop down
+2. Need to add the same form in the manager portal also to request from his HOD.
+3. Need to have an additional approval in the manager portal (Just as a push button) If it is required which has to go to his HOD if the slab of the amount changes.
+4. Approval slabs has to be mentioned 0-5000AED(Manager approval), more than 5000AED. second level approval should be required with the GM or HOD.
+5. Supply chain should also have a login where a person from supply team logins to the portal then the MR received field should be viewed y him. Also he should able to view the complete form and he should able to download the form and supporting documents if needed. As it is the supply chain login they should have an option of selecting stock unavailability in their field and he should able to the details in the form under the "Items Issued to" field.
+6. Round-robin method to be used for Supply chain team.
+7. In total there should be three different logins to be shown on the website (1. User login, Manager login, Supplychain login)
+8. In all the logins there should be a field of tracking their form status
+9. In the manager portal there should also be an analytical representation as per the projects. That assume if there is a PROJECT-A then the manager should able to see complete info of that project.
