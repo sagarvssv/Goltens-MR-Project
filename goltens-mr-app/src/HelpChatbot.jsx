@@ -149,12 +149,23 @@ export default function HelpChatbot({ role, userName, userEmail }) {
   const getFilteredMRs = () => {
     if (!mrData) return [];
     switch (role) {
-      case "user":         return mrData.filter(m => m.submitted_by_email === userEmail);
-      case "manager":      return mrData;
-      case "hod":          return mrData;
-      case "supply_chain": return mrData.filter(m => m.assigned_to === userEmail || ["APPROVED","IN_PROCESS","ISSUED"].includes(m.status));
-      case "warehouse":    return mrData.filter(m => ["APPROVED","IN_PROCESS","ISSUED"].includes(m.status));
-      default:             return mrData;
+      // User sees ONLY their own submitted MRs
+      case "user":
+        return mrData.filter(m => m.submitted_by_email === userEmail);
+      // Manager sees ALL MRs across all portals
+      case "manager":
+        return mrData;
+      // HOD sees ALL MRs across all portals
+      case "hod":
+        return mrData;
+      // Supply chain sees ONLY MRs assigned to them (APPROVED, IN_PROCESS, ISSUED)
+      case "supply_chain":
+        return mrData.filter(m => m.assigned_to === userEmail);
+      // Warehouse sees ONLY MRs in APPROVED, IN_PROCESS, ISSUED status
+      case "warehouse":
+        return mrData.filter(m => ["APPROVED","IN_PROCESS","ISSUED"].includes(m.status));
+      default:
+        return mrData;
     }
   };
 
@@ -201,7 +212,8 @@ export default function HelpChatbot({ role, userName, userEmail }) {
       return `[${mr.mr_id}] Job:${mr.job_no} | By:${mr.submitted_by_name} | Stage:${stage} | Issue:${issue} | AED ${mr.total_cost}`;
     });
 
-    return `=== LIVE MR DATA (${today}) ===
+    return `=== LIVE MR DATA FOR ${getRoleLabel(role).toUpperCase()} PORTAL (${today}) ===
+ACCESS LEVEL: ${role === "manager" || role === "hod" ? "FULL — all portals" : role === "user" ? "RESTRICTED — own submissions only" : role === "supply_chain" ? "RESTRICTED — assigned MRs only" : "RESTRICTED — approved/issued MRs only"}
 Total MRs: ${mrs.length} | Total Spend: AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}
 Last 2 days: ${last2.length} | Last 7 days: ${last7.length}
 Budgeted items Yes: ${budgetedYes} | No: ${budgetedNo}
@@ -336,11 +348,11 @@ function getGreeting(role, name) {
 }
 function getQuickQuestions(role) {
   return {
-    user:         ["My MR status?","Last 7 days submissions","Any rejected MRs?"],
-    manager:      ["Total spend today","Pending approvals","MRs above AED 5000"],
-    hod:          ["HOD pending count","Total utilised","Out of budget items"],
-    supply_chain: ["Approved pending","In process MRs","Issued this week"],
-    warehouse:    ["Pending issuance","Issued today","All approved MRs"],
+    user:         ["What is my latest MR status?", "How many MRs did I submit?", "Any of my MRs rejected?"],
+    manager:      ["Which MRs are delayed?", "Total spend by job number", "Pending approvals count"],
+    hod:          ["MRs waiting for HOD approval", "Total spend all portals", "Out of budget items"],
+    supply_chain: ["MRs assigned to me", "In process MRs", "What was issued this week?"],
+    warehouse:    ["Pending issuance today", "What was issued this week?", "All approved MRs"],
   }[role]||[];
 }
 function getSystemPrompt(role, userName, userEmail, dataContext) {
@@ -363,17 +375,41 @@ FORMATTING RULES (strictly follow these):
 
 ${dataContext}`;
   const extras = {
-    user:`\nYou only know about this user's MRs (already filtered above). Help with: status checks, date range queries, understanding approval stages, form filling guidance.`,
-    manager:`\nHelp with: all MRs overview, pending approvals, spend by user/job/date, budget analysis, approval flow.
-Key capability: The PENDING/DELAYED MRs section shows exactly which MRs are stuck, at which stage, how many days delayed, and why.
-When asked about delays or pending MRs always refer to that section and give specific MR numbers, submitter names, days delayed, and the specific issue.`,
-    hod:`\nHelp with: full system overview, PENDING_HOD MRs, total spend, budget utilisation, escalation analysis.
-Key capability: The PENDING/DELAYED MRs section shows which MRs are waiting for HOD approval specifically (PENDING_HOD status), how many days they have been waiting, and which MRs need immediate attention.
-When asked about delays always give specific MR IDs, submitters, days pending, and stage.`,
-    supply_chain:`\nHelp with: assigned MRs, approved pending queue, in-process tracking, stock unavailability, date range queries.`,
-    warehouse:`\nHelp with: pending issuance, issued MRs, daily counts, items to issue, completion tracking.`,
+
+    user: `
+STRICT ACCESS CONTROL - USER PORTAL ONLY:
+You ONLY have data for MRs submitted by ${userName} (${userEmail}). Data is already filtered.
+ALLOWED: status of own MRs, submission counts, stage tracking, rejection reasons, approval progress, items issued to them.
+DENIED: If asked about manager approvals queue, HOD decisions on other users, supply chain assignments, or warehouse operations - respond:
+"Access Denied - that information is only available in the Manager/HOD/Supply Chain/Warehouse portal. I can only show you your own submitted forms and their status."`,
+
+    manager: `
+FULL ACCESS - MANAGER AND HOD PORTAL:
+You have complete visibility across ALL portals and ALL MRs in the system.
+ALLOWED: everything - pending approvals, spend analysis, delay tracking, per-user stats, supply chain queue, warehouse issuances, HOD pending queue, budget analysis.
+Give specific MR numbers, names, amounts and days delayed when answering about delays or pending items.`,
+
+    hod: `
+FULL ACCESS - HOD AND MANAGER PORTAL:
+You have complete visibility across ALL portals and ALL MRs in the system.
+ALLOWED: everything - PENDING_HOD queue, total spend, all portal statuses, manager approvals, supply chain assignments, warehouse issuances, budget utilisation.
+Give specific MR numbers, submitter names, amounts and days pending when answering about delays.`,
+
+    supply_chain: `
+STRICT ACCESS CONTROL - SUPPLY CHAIN PORTAL ONLY:
+You ONLY have data for MRs assigned to the supply chain. Data is already filtered.
+ALLOWED: assigned MRs, approved pending queue, in-process stock issues, issued MRs, items to process.
+DENIED: If asked about manager approval queues, HOD decisions, user submission history, or other portal data - respond:
+"Access Denied - that information is only available in the Manager/HOD portal. I can only show Supply Chain portal data."`,
+
+    warehouse: `
+STRICT ACCESS CONTROL - WAREHOUSE PORTAL ONLY:
+You ONLY have data for MRs in APPROVED, IN_PROCESS, or ISSUED status. Data is already filtered.
+ALLOWED: pending issuances, issued MRs, daily/weekly counts, items to issue, issued-to details.
+DENIED: If asked about approval history, rejection reasons, manager/HOD decisions, or supply chain internal data - respond:
+"Access Denied - that information is only available in the Manager/HOD/Supply Chain portal. I can only show Warehouse portal data."`,
   };
-  return base + (extras[role]||"");
+    return base + (extras[role]||"");
 }
 
 const btn = {
