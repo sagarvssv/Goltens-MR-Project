@@ -183,11 +183,13 @@ function DocCard({ doc, onPreview }) {
 export default function MRDetailView({ mr, onDownloadPDF, showDownload = true }) {
   const [activeTab, setActiveTab] = useState("form");
 
+  // Build signatories — always show both Manager and HOD approval rows
   const signatories = [
-    { title: "Requested By",    name: mr.submitted_by_name      || "", id_no: mr.submitted_by_id_no     || "", signature: "" },
-    { title: "Approved By",     name: mr.hod_approved_by || mr.approved_by || mr.manager_approved_by || "", id_no: "", signature: "" },
-    { title: "M.R. Received By",name: mr.sc_received_by_name    || "", id_no: mr.sc_received_by_id      || "", signature: mr.sc_received_by_sig || "" },
-    { title: "Items Issued To", name: mr.warehouse_issued_to_name || mr.issued_to_name || "", id_no: mr.warehouse_issued_to_id || mr.issued_to_id || "", signature: mr.issued_to_signature || "" },
+    { title: "Requested By",        name: mr.submitted_by_name        || "", id_no: mr.submitted_by_id_no || "", signature: "" },
+    { title: "Approved By (Manager)",name: mr.approved_by || mr.manager_approved_by || "", id_no: "", signature: "" },
+    { title: "Approved By (HOD/GM)", name: mr.hod_approved_by || "", id_no: "", signature: "" },
+    { title: "M.R. Received By",    name: mr.sc_received_by_name      || "", id_no: mr.sc_received_by_id || "", signature: mr.sc_received_by_sig || "" },
+    { title: "Items Issued To",     name: mr.warehouse_issued_to_name || mr.issued_to_name || "", id_no: mr.warehouse_issued_to_id || mr.issued_to_id || "", signature: "" },
   ];
 
   return (
@@ -229,6 +231,11 @@ export default function MRDetailView({ mr, onDownloadPDF, showDownload = true })
             </div>
           </div>
 
+          {mr.purpose && (
+            <div style={v.purposeBox}>
+              <span style={v.purposeLabel}>Purpose:</span> {mr.purpose}
+            </div>
+          )}
           <div style={v.metaGrid}>
             {[
               ["Vessel",         mr.vessel],
@@ -285,6 +292,7 @@ export default function MRDetailView({ mr, onDownloadPDF, showDownload = true })
           {mr.rejection_reason  && <div style={v.rejectionNote}><strong>Rejection Reason:</strong> {mr.rejection_reason}</div>}
           {mr.inprocess_note    && <div style={v.inprocessNote}><strong>In Process Note:</strong> {mr.inprocess_note}</div>}
           {mr.warehouse_collection_comment && <div style={v.warehouseNote}><strong>Supply Chain Note:</strong> {mr.warehouse_collection_comment}</div>}
+          {mr.warehouse_issue_note && <div style={v.warehouseIssueNote}><strong>Warehouse Note:</strong> {mr.warehouse_issue_note}</div>}
 
           <div style={v.copyNote}>
             White — Accounts &nbsp;|&nbsp; Yellow — Purchase &nbsp;|&nbsp; Blue — Originator
@@ -330,6 +338,8 @@ const dv = {
 
 /* ── Form view styles ── */
 const v = {
+  purposeBox:    { background:"#fff8e1", border:"1px solid #ffe082", borderRadius:6, padding:"10px 14px", fontSize:13, color:"#5d4037", marginBottom:14, lineHeight:1.6 },
+  purposeLabel:  { fontWeight:700, color:G.navy },
   tabs:          { display:"flex", borderBottom:`2px solid ${G.paleBorder}`, marginBottom:16, alignItems:"center" },
   tab:           { background:"none", border:"none", padding:"8px 18px", fontSize:13, cursor:"pointer", color:G.muted, fontWeight:600, borderBottom:"2px solid transparent", marginBottom:-2 },
   tabActive:     { color:G.navy, borderBottom:`2px solid ${G.primary}` },
@@ -352,7 +362,7 @@ const v = {
   totalRow:      { display:"flex", justifyContent:"flex-end", alignItems:"center", gap:12, marginTop:8 },
   totalLabel:    { fontWeight:600, color:G.muted, fontSize:13 },
   totalValue:    { fontWeight:800, fontSize:16, color:G.primary },
-  sigGrid:       { display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12, borderTop:`1px solid ${G.paleBorder}`, paddingTop:14 },
+  sigGrid:       { display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:12, borderTop:`1px solid ${G.paleBorder}`, paddingTop:14 },
   sigBox:        { border:`1px solid ${G.paleBorder}`, borderRadius:6, padding:"10px 12px", background:G.pale },
   sigTitle:      { fontWeight:700, color:G.navy, fontSize:12, marginBottom:8, paddingBottom:4, borderBottom:`1px solid ${G.paleBorder}` },
   sigField:      { marginBottom:5 },
@@ -360,6 +370,7 @@ const v = {
   sigValue:      { fontSize:12, fontWeight:600, color:G.navy },
   rejectionNote: { background:"#fff5f5", border:"1px solid #f5c6c6", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#c0392b", marginBottom:8 },
   inprocessNote: { background:"#fff8e1", border:"1px solid #ffe082", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#b8860b", marginBottom:8 },
-  warehouseNote: { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#1a7a4a", marginBottom:8 },
+  warehouseNote:      { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#1a7a4a", marginBottom:8 },
+  warehouseIssueNote: { background:"#fff3e0", border:"1px solid #ffb74d", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#e65100", marginBottom:8 },
   copyNote:      { fontSize:10, color:G.muted, borderTop:`1px solid ${G.paleBorder}`, paddingTop:8, marginTop:8 },
 };

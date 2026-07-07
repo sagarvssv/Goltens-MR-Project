@@ -1,9 +1,124 @@
+
+function Analytics({ mrs }) {
+  const [deptFilter, setDeptFilter]     = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const departments = ["all", ...new Set(mrs.map(m => m.department || "Unassigned").filter(Boolean))];
+  const statuses    = ["all","PENDING","PENDING_HOD","APPROVED","REJECTED","IN_PROCESS","ISSUED"];
+
+  const filtered = mrs.filter(m => {
+    const deptOk   = deptFilter   === "all" || (m.department||"Unassigned") === deptFilter;
+    const statusOk = statusFilter === "all" || m.status === statusFilter;
+    return deptOk && statusOk;
+  });
+
+  const byDept = {};
+  filtered.forEach(mr => {
+    const d = mr.department || "Unassigned";
+    if (!byDept[d]) byDept[d] = { count:0, total:0, statuses:{} };
+    byDept[d].count++;
+    byDept[d].total += parseFloat(mr.total_cost||0);
+    byDept[d].statuses[mr.status] = (byDept[d].statuses[mr.status]||0)+1;
+  });
+  const deptList = Object.entries(byDept).sort((a,b) => b[1].total - a[1].total);
+  const maxTotal = Math.max(...deptList.map(([,v]) => v.total), 1);
+  const totalSpend = filtered.reduce((s,m) => s + parseFloat(m.total_cost||0), 0);
+  const statusCounts = {};
+  filtered.forEach(m => { statusCounts[m.status] = (statusCounts[m.status]||0)+1; });
+
+  const byJob = {};
+  filtered.forEach(mr => {
+    const j = mr.job_no || "Unassigned";
+    if (!byJob[j]) byJob[j] = { count:0, total:0 };
+    byJob[j].count++;
+    byJob[j].total += parseFloat(mr.total_cost||0);
+  });
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20, background:"#f3e5f5", border:"1px solid #ce93d8", borderRadius:8, padding:"12px 16px", flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:"#4a148c", textTransform:"uppercase", marginBottom:4 }}>Department</div>
+          <select style={{ border:"1px solid #ce93d8", borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:"#4a148c", fontWeight:600, background:"#fff", minWidth:180 }}
+            value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
+            {departments.map(d => <option key={d} value={d}>{d === "all" ? "All Departments" : d}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:"#4a148c", textTransform:"uppercase", marginBottom:4 }}>Status</div>
+          <select style={{ border:"1px solid #ce93d8", borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:"#4a148c", fontWeight:600, background:"#fff", minWidth:180 }}
+            value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            {statuses.map(s => <option key={s} value={s}>{s === "all" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
+          </select>
+        </div>
+        <div style={{ marginLeft:"auto", fontSize:12, color:"#4a148c" }}>Showing <strong>{filtered.length}</strong> of {mrs.length} MRs</div>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:24 }}>
+        {[
+          ["Total MRs",    filtered.length,  "#4a148c"],
+          ["Total Spend",  `AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`, G.primary],
+          ["Approved",     (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0), G.success],
+          ["Pending HOD",  statusCounts["PENDING_HOD"]||0, "#7b1fa2"],
+        ].map(([l,v,c]) => (
+          <div key={l} style={{ background:G.white, border:"1px solid #ce93d8", borderRadius:8, padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:20, fontWeight:700, color:c, marginBottom:4 }}>{v}</div>
+            <div style={{ fontSize:11, color:G.muted, fontWeight:600, textTransform:"uppercase" }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Department bar chart */}
+      <div style={{ fontWeight:700, fontSize:13, color:"#4a148c", marginBottom:12, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #4a148c" }}>Spend by Department</div>
+      {deptList.length === 0 ? <div style={{ color:"#aaa", marginBottom:20 }}>No data for selected filters.</div> : (
+        <div style={{ marginBottom:24 }}>
+          {deptList.map(([dept,v]) => (
+            <div key={dept} style={{ marginBottom:12 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"#4a148c", marginBottom:4 }}>{dept}</div>
+              <div style={{ background:"#f3e5f5", borderRadius:4, height:24, position:"relative" }}>
+                <div style={{ background:"linear-gradient(90deg,#7b1fa2,#4a148c)", borderRadius:4, height:"100%", width:`${(v.total/maxTotal)*100}%`, minWidth:4 }}/>
+                <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:11, fontWeight:600, color:"#4a148c" }}>
+                  AED {v.total.toLocaleString("en-AE",{minimumFractionDigits:0})}
+                </span>
+              </div>
+              <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
+                <span style={{ background:"#f3e5f5", color:"#4a148c", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{v.count} MRs</span>
+                {Object.entries(v.statuses).map(([st,cnt]) => (
+                  <span key={st} style={{ background:G.pale, color:G.navy, borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{st.replace(/_/g," ")}: {cnt}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Job No table */}
+      <div style={{ fontWeight:700, fontSize:13, color:"#4a148c", marginBottom:12, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #4a148c" }}>Spend by Job Number</div>
+      {Object.keys(byJob).length === 0 ? <div style={{ color:"#aaa" }}>No data.</div> : (
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <thead><tr>{["Job No.","MR Count","Total Spend (AED)"].map(h => <th key={h} style={{ background:"#4a148c", color:"#fff", padding:"8px 10px", textAlign:"left", fontWeight:600, fontSize:11 }}>{h}</th>)}</tr></thead>
+          <tbody>{Object.entries(byJob).sort((a,b) => b[1].total-a[1].total).map(([j,v],i) => (
+            <tr key={j} style={{ background: i%2===0 ? "#fff" : G.pale }}>
+              <td style={{ padding:"7px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>Job No: {j}</td>
+              <td style={{ padding:"7px 10px", borderBottom:`1px solid ${G.paleBorder}` }}>{v.count}</td>
+              <td style={{ padding:"7px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>AED {v.total.toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 import { useState, useEffect } from "react";
 import { listMRs } from "./api";
 import MRDetailView from "./MRDetailView";
 import MRForm from "./MRForm";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
+import { downloadMRWithDocs } from "./downloadPDF";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import FormSelectionModal from "./FormSelectionModal";
 import HelpChatbot from "./HelpChatbot";
@@ -14,74 +129,6 @@ async function call(action,data={}) {
   if(!res.ok) throw new Error(`${res.status}`); return res.json();
 }
 
-function downloadMRPDF(mr) {
-  const win = window.open("","_blank");
-  win.document.write(`<html><head><title>MR ${mr.mr_id}</title>
-  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h2{color:#4a148c}
-  table{width:100%;border-collapse:collapse}th{background:#4a148c;color:#fff;padding:6px 8px;text-align:left}
-  td{padding:5px 8px;border-bottom:1px solid #eee}
-  .sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px;border-top:1px solid #ccc;padding-top:12px}
-  .sig-box{border:1px solid #ccc;padding:8px;border-radius:4px}.sig-title{font-weight:bold;margin-bottom:6px;font-size:11px;color:#4a148c}
-  </style></head><body>
-  <h2>Goltens Co. Ltd. Dubai Branch</h2><h3>Material Requisition — ${mr.mr_id}</h3>
-  <p><b>Vessel:</b> ${mr.vessel} &nbsp; <b>Dept:</b> ${mr.department||"—"} &nbsp; <b>Job:</b> ${mr.job_no} &nbsp; <b>Status:</b> ${mr.status?.replace(/_/g," ")}</p>
-  <table><thead><tr><th>S.N.</th><th>Item Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Activity Code</th><th>Est. Cost</th><th>Budgeted</th></tr></thead>
-  <tbody>${(mr.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${it.item_code}</td><td>${it.description}</td><td>${it.qty}</td><td>${it.uom}</td><td>${it.activity_code}</td><td>${it.estimated_cost}</td><td>${it.budgeted}</td></tr>`).join("")}</tbody></table>
-  <p><b>Total: AED ${parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</b></p>
-  <div class="sig-grid">
-    <div class="sig-box"><div class="sig-title">Requested By</div>${mr.submitted_by_name||"—"}</div>
-    <div class="sig-box"><div class="sig-title">Approved By</div>${mr.approved_by||mr.hod_approved_by||"—"}</div>
-    <div class="sig-box"><div class="sig-title">MR Received By</div>${mr.sc_received_by_name||"—"}</div>
-    <div class="sig-box"><div class="sig-title">Items Issued To</div>${mr.warehouse_issued_to_name||"—"}</div>
-  </div></body></html>`);
-  win.document.close(); win.print();
-}
-
-function Analytics({ mrs }) {
-  const projects = {};
-  mrs.forEach(mr => {
-    const key = mr.job_no || "Unassigned";
-    if(!projects[key]) projects[key]={job_no:key,count:0,total:0,pending:0,approved:0,rejected:0};
-    projects[key].count++;
-    projects[key].total += parseFloat(mr.total_cost||0);
-    if(["PENDING","PENDING_HOD"].includes(mr.status)) projects[key].pending++;
-    else if(mr.status==="APPROVED"||mr.status==="ISSUED") projects[key].approved++;
-    else if(mr.status==="REJECTED") projects[key].rejected++;
-  });
-  const list = Object.values(projects).sort((a,b)=>b.total-a.total);
-  const maxTotal = Math.max(...list.map(p=>p.total), 1);
-  const totalSpend = mrs.reduce((s,m)=>s+parseFloat(m.total_cost||0),0);
-  return (
-    <div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
-        {[["Total MRs",mrs.length,"#4a148c"],["Total Spend",`AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`,G.primary],
-          ["Approved",mrs.filter(m=>m.status==="APPROVED"||m.status==="ISSUED").length,G.success],
-          ["Pending HOD",mrs.filter(m=>m.status==="PENDING_HOD").length,"#7b1fa2"]
-        ].map(([l,v,c])=>(
-          <div key={l} style={{background:G.white,border:`1px solid ${G.paleBorder}`,borderRadius:8,padding:"14px 16px",textAlign:"center"}}>
-            <div style={{fontSize:20,fontWeight:700,color:c,marginBottom:4}}>{v}</div>
-            <div style={{fontSize:11,color:G.muted,fontWeight:600,textTransform:"uppercase"}}>{l}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{fontWeight:700,fontSize:13,color:"#333",marginBottom:12,textTransform:"uppercase"}}>Spend by Project</div>
-      {list.map(p=>(
-        <div key={"Job No: " + p.job_no} style={{marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:600,color:"#4a148c",marginBottom:4}}>{"Job No: " + p.job_no}</div>
-          <div style={{background:G.pale,borderRadius:4,height:24,position:"relative",overflow:"visible"}}>
-            <div style={{background:"linear-gradient(90deg,#7b1fa2,#4a148c)",borderRadius:4,height:"100%",width:`${(p.total/maxTotal)*100}%`,minWidth:4}}/>
-            <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,fontWeight:600,color:"#4a148c"}}>AED {p.total.toLocaleString("en-AE",{minimumFractionDigits:0})}</span>
-          </div>
-          <div style={{display:"flex",gap:6,marginTop:4}}>
-            <span style={{background:"#f3e5f5",color:"#4a148c",borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:600}}>{p.count} MRs</span>
-            {p.pending>0&&<span style={{background:"#fff8e1",color:"#b8860b",borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:600}}>{p.pending} pending</span>}
-            {p.approved>0&&<span style={{background:"#e8f5e9",color:G.success,borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:600}}>{p.approved} approved</span>}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export default function HODPortal({ session, onLogout }) {
   const [view, setView]           = useState("queue");
@@ -224,7 +271,7 @@ export default function HODPortal({ session, onLogout }) {
               <div style={{fontSize:14,color:"#aaa"}}>{pendingHOD.length===0?"No MRs awaiting HOD approval.":"Select an MR from the sidebar to review."}</div></div>
             ):(
               <div>
-                <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRPDF(selected)} />
+                <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRWithDocs(selected)} />
                 <div style={s.decisionPanel}>
                   <div style={s.panelTitle}>HOD Decision</div>
                   {canRevert&&(

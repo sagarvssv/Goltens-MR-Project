@@ -1,9 +1,94 @@
+
+function Analytics({ mrs }) {
+  const [jobFilter, setJobFilter] = useState("all");
+
+  const jobs = ["all", ...new Set(mrs.map(m => m.job_no || "Unassigned"))];
+
+  const filtered = jobFilter === "all" ? mrs : mrs.filter(m => (m.job_no || "Unassigned") === jobFilter);
+
+  const projects = {};
+  filtered.forEach(mr => {
+    const key = mr.job_no || "Unassigned";
+    if (!projects[key]) projects[key] = { job_no:key, count:0, total:0, pending:0, approved:0, rejected:0, inprocess:0 };
+    projects[key].count++;
+    projects[key].total += parseFloat(mr.total_cost || 0);
+    if (["PENDING","PENDING_HOD"].includes(mr.status)) projects[key].pending++;
+    else if (mr.status === "APPROVED" || mr.status === "ISSUED") projects[key].approved++;
+    else if (mr.status === "REJECTED") projects[key].rejected++;
+    else if (mr.status === "IN_PROCESS") projects[key].inprocess++;
+  });
+
+  const list       = Object.values(projects).sort((a,b) => b.total - a.total);
+  const maxTotal   = Math.max(...list.map(p => p.total), 1);
+  const totalSpend = filtered.reduce((s,m) => s + parseFloat(m.total_cost||0), 0);
+  const statusCounts = {};
+  filtered.forEach(m => { statusCounts[m.status] = (statusCounts[m.status]||0)+1; });
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20, background:G.pale, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"12px 16px" }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:G.muted, textTransform:"uppercase", marginBottom:4 }}>Job Number</div>
+          <select style={{ border:`1px solid ${G.paleBorder}`, borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:G.navy, fontWeight:600, background:"#fff", minWidth:180 }}
+            value={jobFilter} onChange={e => setJobFilter(e.target.value)}>
+            {jobs.map(j => <option key={j} value={j}>{j === "all" ? "All Job Numbers" : "Job No: " + j}</option>)}
+          </select>
+        </div>
+        <div style={{ marginLeft:"auto", fontSize:12, color:G.muted }}>Showing <strong>{filtered.length}</strong> of {mrs.length} MRs</div>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:12, marginBottom:24 }}>
+        {[
+          ["Total MRs",   filtered.length,                                                             G.navy],
+          ["Total Spend", `AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`,       G.primary],
+          ["Pending",     (statusCounts["PENDING"]||0)+(statusCounts["PENDING_HOD"]||0),               "#b8860b"],
+          ["Approved",    (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0),                   G.success],
+          ["Rejected",    statusCounts["REJECTED"]||0,                                                 G.danger],
+        ].map(([label,val,color]) => (
+          <div key={label} style={{ background:G.white, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:20, fontWeight:700, color, marginBottom:4 }}>{val}</div>
+            <div style={{ fontSize:11, color:G.muted, fontWeight:600, textTransform:"uppercase" }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bar chart per project */}
+      <div style={{ fontWeight:700, fontSize:13, color:G.navy, marginBottom:12, textTransform:"uppercase", paddingBottom:4, borderBottom:`2px solid ${G.primary}` }}>Spend by Job Number</div>
+      {list.length === 0 ? <div style={{ color:"#aaa" }}>No MRs yet.</div> : (
+        <div>
+          {list.map(p => (
+            <div key={p.job_no} style={{ marginBottom:14 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:G.navy, marginBottom:4 }}>{"Job No: " + p.job_no}</div>
+              <div style={{ background:G.pale, borderRadius:4, height:24, position:"relative", overflow:"visible" }}>
+                <div style={{ background:`linear-gradient(90deg,${G.primary},${G.steel})`, borderRadius:4, height:"100%", width:`${(p.total/maxTotal)*100}%`, minWidth:4, transition:"width 0.5s" }}/>
+                <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:11, fontWeight:600, color:G.navy }}>
+                  AED {p.total.toLocaleString("en-AE",{minimumFractionDigits:0})}
+                </span>
+              </div>
+              <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
+                <span style={{ background:"#eaf1fb", color:G.primary, borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.count} MRs</span>
+                {p.pending>0   && <span style={{ background:"#fff8e1", color:"#b8860b",  borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.pending} pending</span>}
+                {p.approved>0  && <span style={{ background:"#e8f5e9", color:G.success,  borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.approved} approved</span>}
+                {p.rejected>0  && <span style={{ background:"#fff5f5", color:G.danger,   borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.rejected} rejected</span>}
+                {p.inprocess>0 && <span style={{ background:"#fff8e1", color:"#b8860b",  borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.inprocess} in process</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 import { useState, useEffect } from "react";
 import { listMRs, approveMR, rejectMR, markInProcessMR } from "./api";
 import MRDetailView from "./MRDetailView";
 import MRForm from "./MRForm";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
+import { downloadMRWithDocs } from "./downloadPDF";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import FormSelectionModal from "./FormSelectionModal";
 import HelpChatbot from "./HelpChatbot";
@@ -14,88 +99,6 @@ async function call(action,data={}) {
   if(!res.ok) throw new Error(`${res.status}`); return res.json();
 }
 
-function downloadMRPDF(mr) {
-  const win = window.open("","_blank");
-  win.document.write(`<html><head><title>MR ${mr.mr_id}</title>
-  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h2{color:#1A3A5C}
-  table{width:100%;border-collapse:collapse}th{background:#1A3A5C;color:#fff;padding:6px 8px;text-align:left}
-  td{padding:5px 8px;border-bottom:1px solid #eee}
-  .sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px;border-top:1px solid #ccc;padding-top:12px}
-  .sig-box{border:1px solid #ccc;padding:8px;border-radius:4px}.sig-title{font-weight:bold;margin-bottom:6px;font-size:11px;color:#1A3A5C}
-  </style></head><body>
-  <h2>Goltens Co. Ltd. Dubai Branch</h2><h3>Material Requisition — ${mr.mr_id}</h3>
-  <p><b>Vessel:</b> ${mr.vessel} &nbsp; <b>Dept:</b> ${mr.department||"—"} &nbsp; <b>Job:</b> ${mr.job_no} &nbsp; <b>Status:</b> ${mr.status?.replace(/_/g," ")}</p>
-  <p><b>Date Requested:</b> ${mr.date_requested} &nbsp; <b>Date Required:</b> ${mr.date_required}</p>
-  <table><thead><tr><th>S.N.</th><th>Item Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Activity Code</th><th>Est. Cost</th><th>Budgeted</th></tr></thead>
-  <tbody>${(mr.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${it.item_code}</td><td>${it.description}</td><td>${it.qty}</td><td>${it.uom}</td><td>${it.activity_code}</td><td>${it.estimated_cost}</td><td>${it.budgeted}</td></tr>`).join("")}</tbody></table>
-  <p><b>Total: AED ${parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</b></p>
-  <div class="sig-grid">
-    <div class="sig-box"><div class="sig-title">Requested By</div>${mr.submitted_by_name||"—"}</div>
-    <div class="sig-box"><div class="sig-title">Approved By</div>${mr.approved_by||"—"}</div>
-    <div class="sig-box"><div class="sig-title">MR Received By</div>${mr.sc_received_by_name||"—"}</div>
-    <div class="sig-box"><div class="sig-title">Items Issued To</div>${mr.warehouse_issued_to_name||"—"}</div>
-  </div></body></html>`);
-  win.document.close(); win.print();
-}
-
-function Analytics({ mrs }) {
-  const projects = {};
-  mrs.forEach(mr => {
-    const key = mr.job_no || "Unassigned";
-    if(!projects[key]) projects[key]={job_no:key,count:0,total:0,pending:0,approved:0,rejected:0,inprocess:0};
-    projects[key].count++;
-    projects[key].total += parseFloat(mr.total_cost||0);
-    if(["PENDING","PENDING_HOD"].includes(mr.status)) projects[key].pending++;
-    else if(mr.status==="APPROVED"||mr.status==="ISSUED") projects[key].approved++;
-    else if(mr.status==="REJECTED") projects[key].rejected++;
-    else if(mr.status==="IN_PROCESS") projects[key].inprocess++;
-  });
-  const list = Object.values(projects).sort((a,b)=>b.total-a.total);
-  const maxTotal = Math.max(...list.map(p=>p.total), 1);
-  const totalSpend = mrs.reduce((s,m)=>s+parseFloat(m.total_cost||0),0);
-  const statusCounts = {};
-  mrs.forEach(m=>{ statusCounts[m.status]=(statusCounts[m.status]||0)+1; });
-
-  return (
-    <div>
-      <div style={an.grid}>
-        {[
-          ["Total MRs",   mrs.length,                                                         G.navy],
-          ["Total Spend", `AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`, G.primary],
-          ["Pending",     (statusCounts["PENDING"]||0)+(statusCounts["PENDING_HOD"]||0),      "#b8860b"],
-          ["Approved",    (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0),           G.success],
-          ["Rejected",    statusCounts["REJECTED"]||0,                                         G.danger],
-        ].map(([label,val,color])=>(
-          <div key={label} style={an.card}>
-            <div style={{...an.val,color}}>{val}</div>
-            <div style={an.lbl}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={an.sectionTitle}>Spend by Project</div>
-      {list.length===0 ? <div style={{color:"#aaa"}}>No MRs yet.</div> : (
-        <div>
-          {list.map(p=>(
-            <div key={p.job_no} style={an.barRow}>
-              <div style={an.barLabel}>{"Job No: " + p.job_no}</div>
-              <div style={an.barTrack}>
-                <div style={{...an.barFill, width:`${(p.total/maxTotal)*100}%`}}/>
-                <span style={an.barValue}>AED {p.total.toLocaleString("en-AE",{minimumFractionDigits:0})}</span>
-              </div>
-              <div style={an.barMeta}>
-                <span style={{...an.pill,background:"#eaf1fb",color:G.primary}}>{p.count} MRs</span>
-                {p.pending>0  && <span style={{...an.pill,background:"#fff8e1",color:"#b8860b"}}>{p.pending} pending</span>}
-                {p.approved>0 && <span style={{...an.pill,background:"#e8f5e9",color:G.success}}>{p.approved} approved</span>}
-                {p.rejected>0 && <span style={{...an.pill,background:"#fff5f5",color:G.danger}}>{p.rejected} rejected</span>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ManagerPortal({ session, onLogout }) {
   const [view, setView]             = useState("queue");
@@ -307,7 +310,7 @@ export default function ManagerPortal({ session, onLogout }) {
               </div>
             ) : (
               <div>
-                <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRPDF(selected)} />
+                <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRWithDocs(selected)} />
 
                 {/* Decision panel */}
                 <div style={s.decisionPanel}>

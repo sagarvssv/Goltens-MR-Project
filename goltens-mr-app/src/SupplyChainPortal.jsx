@@ -3,6 +3,7 @@ import { listMRs } from "./api";
 import MRDetailView from "./MRDetailView";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
+import { downloadMRWithDocs } from "./downloadPDF";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import HelpChatbot from "./HelpChatbot";
 
@@ -11,32 +12,6 @@ async function call(action, data={}) {
   if(!res.ok) throw new Error(`${res.status}`); return res.json();
 }
 
-function downloadMRPDF(mr) {
-  const win = window.open("","_blank");
-  win.document.write(`<html><head><title>MR ${mr.mr_id}</title>
-  <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}
-  h2{color:#1A3A5C}table{width:100%;border-collapse:collapse}
-  th{background:#0d6b4e;color:#fff;padding:6px 8px;text-align:left}
-  td{padding:5px 8px;border-bottom:1px solid #eee}
-  .sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px;border-top:1px solid #ccc;padding-top:12px}
-  .sig-box{border:1px solid #ccc;padding:8px;border-radius:4px}
-  .sig-title{font-weight:bold;margin-bottom:6px;font-size:11px;color:#0d6b4e}
-  </style></head><body>
-  <h2>Goltens Co. Ltd. Dubai Branch</h2>
-  <h3>Material Requisition — ${mr.mr_id}</h3>
-  <p><b>Vessel:</b> ${mr.vessel} &nbsp; <b>Dept:</b> ${mr.department||"—"} &nbsp; <b>Job:</b> ${mr.job_no} &nbsp; <b>Status:</b> ${mr.status?.replace(/_/g," ")}</p>
-  <table><thead><tr><th>S.N.</th><th>Item Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Activity Code</th><th>Est. Cost</th><th>Budgeted</th></tr></thead>
-  <tbody>${(mr.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${it.item_code}</td><td>${it.description}</td><td>${it.qty}</td><td>${it.uom}</td><td>${it.activity_code}</td><td>${it.estimated_cost}</td><td>${it.budgeted}</td></tr>`).join("")}</tbody></table>
-  <p><b>Total: AED ${parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</b></p>
-  ${mr.warehouse_collection_comment?`<p style="background:#e8f5e9;padding:8px"><b>Warehouse Note:</b> ${mr.warehouse_collection_comment}</p>`:""}
-  <div class="sig-grid">
-    <div class="sig-box"><div class="sig-title">Requested By</div>${mr.submitted_by_name||"—"}</div>
-    <div class="sig-box"><div class="sig-title">Approved By</div>${mr.approved_by||mr.hod_approved_by||"—"}</div>
-    <div class="sig-box"><div class="sig-title">MR Received By</div>${mr.sc_received_by_name||"—"}</div>
-    <div class="sig-box"><div class="sig-title">Items Issued To</div>${mr.warehouse_issued_to_name||"—"}</div>
-  </div></body></html>`);
-  win.document.close(); win.print();
-}
 
 export default function SupplyChainPortal({ session, onLogout }) {
   const [mrs, setMrs]           = useState([]);
@@ -63,6 +38,7 @@ export default function SupplyChainPortal({ session, onLogout }) {
   useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,30000); return()=>clearInterval(t); },[]);
 
   const [formFilter, setFormFilter] = useState("all");
+  const [scPortalView, setScPortalView] = useState("queue"); // queue | analytics
   const filteredMRs = filterByFormType(mrs, formFilter);
   const openMR = (mr) => {
     setSelected(mr); setActionMsg("");
@@ -111,7 +87,13 @@ export default function SupplyChainPortal({ session, onLogout }) {
             <GoltensLogo size="sm" dark style={{flexShrink:0}}/>
           </div>
           <div style={s.portalLabel}>Supply Chain Portal</div>
-          <div style={{padding:"6px 12px"}}><FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="rgba(255,255,255,0.9)" compact/></div>
+          <div style={{padding:"8px 12px 4px"}}>
+            <div style={{display:"flex",gap:6,marginBottom:8}}>
+              <button style={{flex:1,padding:"6px",borderRadius:5,border:"none",background:scPortalView==="queue"?"#0d6b4e":"rgba(255,255,255,0.15)",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}} onClick={()=>setScPortalView("queue")}>📋 Queue</button>
+              <button style={{flex:1,padding:"6px",borderRadius:5,border:"none",background:scPortalView==="analytics"?"#0d6b4e":"rgba(255,255,255,0.15)",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}} onClick={()=>setScPortalView("analytics")}>📊 Analytics</button>
+            </div>
+          </div>
+          <div style={{padding:"0 12px 4px"}}><FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="rgba(255,255,255,0.9)" compact/></div>
           <div style={s.sideSection}>MR QUEUE</div>
           {loading && <div style={s.sideLoading}>Loading…</div>}
           {!loading && filteredMRs.length===0 && <div style={s.sideLoading}>No MRs assigned.</div>}
@@ -136,14 +118,21 @@ export default function SupplyChainPortal({ session, onLogout }) {
 
         {/* Main */}
         <div style={s.main}>
-          {!selected ? (
+          {scPortalView==="analytics" && (
+            <div>
+              <div style={{fontWeight:700,fontSize:18,color:"#0d6b4e",marginBottom:20,paddingBottom:12,borderBottom:"2px solid #0d6b4e"}}>Supply Chain Analytics</div>
+              <SCAnalytics mrs={filteredMRs}/>
+            </div>
+          )}
+          {scPortalView==="queue" && !selected && (
             <div style={s.emptyState}>
               <div style={{fontSize:48,marginBottom:16}}>📦</div>
               <div style={{fontSize:14,color:"#aaa"}}>Select an approved MR to process</div>
             </div>
-          ) : (
+          )}
+          {scPortalView==="queue" && selected && (
             <div>
-              <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRPDF(selected)} />
+              <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRWithDocs(selected)} />
 
               {/* SC action panel */}
               <div style={s.actionPanel}>
@@ -222,3 +211,140 @@ const s = {
   stockBtn:{background:"#b8860b",color:"#fff",border:"none",borderRadius:5,padding:"10px 24px",fontSize:13,fontWeight:700,cursor:"pointer"},
   actionMsg:{marginTop:10,background:"#e8f5e9",border:"1px solid #a5d6a7",borderRadius:5,padding:"8px 12px",fontSize:12,color:"#1a7a4a"},
 };
+
+
+
+function SCAnalytics({ mrs }) {
+  const [deptFilter, setDeptFilter] = useState("all");
+  const safeMrs     = Array.isArray(mrs) ? mrs : [];
+  const departments = ["all", ...new Set(safeMrs.map(m => m.department || "Unassigned"))];
+  const filtered    = deptFilter === "all" ? safeMrs : safeMrs.filter(m => (m.department||"Unassigned") === deptFilter);
+
+  const pendingMRs   = filtered.filter(m => m.status === "APPROVED");
+  const inProcessMRs = filtered.filter(m => m.status === "IN_PROCESS");
+  const issuedMRs    = filtered.filter(m => m.status === "ISSUED");
+
+  // Dept wise items
+  const byDept = {};
+  filtered.forEach(mr => {
+    const d = mr.department || "Unassigned";
+    if (!byDept[d]) byDept[d] = { issued:0, pending:0, inprocess:0, total:0, items:[] };
+    if (mr.status === "ISSUED")      byDept[d].issued++;
+    else if (mr.status === "IN_PROCESS") byDept[d].inprocess++;
+    else                             byDept[d].pending++;
+    byDept[d].total += parseFloat(mr.total_cost||0);
+    (mr.items||[]).forEach(it => byDept[d].items.push({ ...it, mr_id: mr.mr_id }));
+  });
+
+  return (
+    <div>
+      {/* Filter */}
+      <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20, background:"#e0f2f1", border:"1px solid #b2dfdb", borderRadius:8, padding:"12px 16px" }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:"#0d6b4e", textTransform:"uppercase", marginBottom:4 }}>Department</div>
+          <select style={{ border:"1px solid #b2dfdb", borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:"#0d6b4e", fontWeight:600, background:"#fff", minWidth:180 }}
+            value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
+            {departments.map(d => <option key={d} value={d}>{d === "all" ? "All Departments" : d}</option>)}
+          </select>
+        </div>
+        <div style={{ marginLeft:"auto", fontSize:12, color:"#0d6b4e" }}>Showing <strong>{filtered.length}</strong> of {safeMrs.length} MRs</div>
+      </div>
+
+      {filtered.length === 0 && (
+        <div style={{ textAlign:"center", padding:"40px 20px", color:"#aaa" }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>📊</div>
+          <div style={{ fontSize:14, fontWeight:600 }}>No MR data for selected filter</div>
+          <div style={{ fontSize:12, marginTop:6 }}>Try selecting "All Departments"</div>
+        </div>
+      )}
+      {filtered.length > 0 && <>
+      {/* Summary */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:24 }}>
+        {[
+          ["Pending Procurement", pendingMRs.length,   "#b8860b"],
+          ["In Process (Stock)",  inProcessMRs.length, G.primary],
+          ["Issued",              issuedMRs.length,    G.success],
+        ].map(([l,v,c]) => (
+          <div key={l} style={{ background:"#fff", border:"1px solid #b2dfdb", borderRadius:8, padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:24, fontWeight:700, color:c, marginBottom:4 }}>{v}</div>
+            <div style={{ fontSize:11, color:"#0d6b4e", fontWeight:600, textTransform:"uppercase" }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Pending Procurement */}
+      <div style={{ fontWeight:700, fontSize:13, color:"#0d6b4e", marginBottom:10, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #0d6b4e" }}>
+        Pending Procurement ({pendingMRs.length})
+      </div>
+      {pendingMRs.length === 0 ? <div style={{ color:"#aaa", marginBottom:20 }}>No pending MRs.</div> : (
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:24 }}>
+          <thead><tr>{["MR Number","Vessel","Department","Job No.","Submitted By","Total (AED)"].map(h =>
+            <th key={h} style={{ background:"#0d6b4e", color:"#fff", padding:"7px 10px", textAlign:"left", fontSize:11, fontWeight:600 }}>{h}</th>
+          )}</tr></thead>
+          <tbody>{pendingMRs.map((mr,i) => (
+            <tr key={mr.mr_id} style={{ background: i%2===0 ? "#fff" : "#e0f2f1" }}>
+              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb", fontWeight:600 }}>{mr.mr_id}</td>
+              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.vessel}</td>
+              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.department||"—"}</td>
+              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.job_no}</td>
+              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.submitted_by_name}</td>
+              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb", fontWeight:600 }}>AED {parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
+
+      {/* In Process */}
+      {inProcessMRs.length > 0 && (
+        <>
+          <div style={{ fontWeight:700, fontSize:13, color:"#0d6b4e", marginBottom:10, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #0d6b4e" }}>
+            In Process — Awaiting Stock ({inProcessMRs.length})
+          </div>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:24 }}>
+            <thead><tr>{["MR Number","Job No.","Note","Total (AED)"].map(h =>
+              <th key={h} style={{ background:"#1B6CA8", color:"#fff", padding:"7px 10px", textAlign:"left", fontSize:11, fontWeight:600 }}>{h}</th>
+            )}</tr></thead>
+            <tbody>{inProcessMRs.map((mr,i) => (
+              <tr key={mr.mr_id} style={{ background: i%2===0 ? "#fff" : G.pale }}>
+                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>{mr.mr_id}</td>
+                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}` }}>{mr.job_no}</td>
+                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}` }}>{mr.inprocess_note||"—"}</td>
+                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>AED {parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </>
+      )}
+
+      {/* Dept wise issued */}
+      <div style={{ fontWeight:700, fontSize:13, color:"#0d6b4e", marginBottom:10, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #0d6b4e" }}>
+        Department Wise Items
+      </div>
+      {Object.entries(byDept).map(([dept, v]) => (
+        <div key={dept} style={{ marginBottom:16, border:"1px solid #b2dfdb", borderRadius:8, overflow:"hidden" }}>
+          <div style={{ background:"#0d6b4e", color:"#fff", padding:"8px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ fontWeight:700, fontSize:13 }}>{dept}</span>
+            <span style={{ fontSize:11 }}>{v.issued} Issued · {v.pending} Pending · {v.inprocess} In Process · AED {v.total.toLocaleString("en-AE",{minimumFractionDigits:0})}</span>
+          </div>
+          {v.items.length > 0 && (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+              <thead><tr>{["Item Code","Description","Qty","UOM","Est. Cost (AED)"].map(h =>
+                <th key={h} style={{ background:"#e0f2f1", color:"#0d6b4e", padding:"5px 10px", textAlign:"left", fontSize:10, fontWeight:600 }}>{h}</th>
+              )}</tr></thead>
+              <tbody>{v.items.slice(0,15).map((it,i) => (
+                <tr key={i} style={{ background: i%2===0 ? "#fff" : "#f5fffe" }}>
+                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.item_code||"—"}</td>
+                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.description}</td>
+                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.qty}</td>
+                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.uom}</td>
+                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>AED {parseFloat(it.estimated_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      ))}
+      </>}
+    </div>
+  );
+}

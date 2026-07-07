@@ -1,10 +1,6 @@
 /**
- * theme.js — Goltens brand colors extracted from logo
- * Primary:   #1B6CA8  (Goltens blue)
- * Dark navy: #1A3A5C  (deep brand navy)
- * Light blue:#7CB4D4  (light accent)
- * Steel:     #4A8AB5  (mid tone)
- * Text:      #1A1A1A  (wordmark black)
+ * theme.js — Goltens brand colors + typography
+ * Font: Inter (professional enterprise font)
  */
 export const G = {
   primary:    "#1B6CA8",
@@ -16,7 +12,6 @@ export const G = {
   text:       "#1A1A1A",
   muted:      "#5a7a96",
   white:      "#ffffff",
-  // Status
   success:    "#1a7a4a",
   successBg:  "#e8f5e9",
   danger:     "#c0392b",
@@ -28,3 +23,5 @@ export const G = {
   green:      "#0d6b4e",
   greenBg:    "#e0f2f1",
 };
+
+export const FONT = "'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif";

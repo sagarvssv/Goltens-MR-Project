@@ -31,6 +31,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
   const [jobNo, setJobNo]           = useState("");
   const [dateRequested]             = useState(today());
   const [dateRequired, setDateRequired] = useState("");
+  const [purpose, setPurpose]           = useState("");
   const [items, setItems]           = useState([emptyItem()]);
   const [docFiles, setDocFiles]     = useState([]);       // File objects yet to upload
   const [submitting, setSubmitting] = useState(false);
@@ -64,6 +65,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
     if (!department.trim()) e.department = "Required";
     if (!jobNo.trim()) e.jobNo = "Required";
     if (!dateRequired) e.dateRequired = "Required";
+    if (!purpose.trim()) e.purpose = "Required";
     if (!requestedBy.name.trim()) e.requestedByName = "Required";
     if (!items.some(it => it.description.trim())) e.items = "At least one item is required";
     setErrors(e);
@@ -103,7 +105,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
         submitted_by_name: requestedBy.name, submitted_by_email: session.email,
         submitted_by_id_no: requestedBy.id_no, manager_email: managerEmail,
         hod_email: hodEmail, approval_slab: approvalSlab,
-        items: validItems, document_s3_keys: s3Keys, needs_hod_approval: needsHOD, form_type: formType,
+        items: validItems, document_s3_keys: s3Keys, needs_hod_approval: needsHOD, form_type: formType, purpose: purpose,
       });
 
       if (result?.success === false) { setSubmitError(result.error || "Submission failed."); setSubmitting(false); return; }
@@ -221,6 +223,24 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
             <div style={s.titleArea}>
               <div style={s.formTitle}>MATERIAL REQUISITION / STORE ISSUE</div>
               <div style={s.mrNoRow}><span style={s.mrNoLabel}>No.</span><span style={s.mrNo}>{mrNo || "—"}</span></div>
+            </div>
+          </div>
+
+          {/* Purpose / Description section */}
+          <div style={s.purposeSection}>
+            <div style={s.purposeLeft}>
+              <div style={s.purposeHeading}>Purpose</div>
+              <div style={s.purposeSubtext}>Describe the reason for this material requisition request</div>
+            </div>
+            <div style={s.purposeRight}>
+              <textarea
+                style={{ ...s.purposeBox, ...(errors.purpose ? { border:`1.5px solid ${G.danger}` } : {}) }}
+                rows={3}
+                placeholder="e.g. Required for scheduled maintenance of Al Marjan vessel engine — Job J-2025-014. Items needed before 15th July to avoid operational delay."
+                value={purpose}
+                onChange={e => setPurpose(e.target.value)}
+              />
+              {errors.purpose && <span style={{ color:G.danger, fontSize:11 }}>Purpose is required</span>}
             </div>
           </div>
 
@@ -342,7 +362,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
 }
 
 const s = {
-  page:           { minHeight:"100vh", background:`linear-gradient(160deg, ${G.pale} 0%, #f0f4f8 100%)`, padding:"24px 16px", fontFamily:"'Segoe UI', Arial, sans-serif", fontSize:13 },
+  page:           { minHeight:"100vh", background:`linear-gradient(160deg, ${G.pale} 0%, #f0f4f8 100%)`, padding:"24px 16px", fontFamily:"'Inter', 'Segoe UI', system-ui, Arial, sans-serif", fontSize:13 },
   formCard:       { maxWidth:1100, margin:"0 auto", background:G.white, borderRadius:12, boxShadow:`0 4px 24px ${G.primary}22`, padding:"24px 32px 28px", border:`1px solid ${G.paleBorder}` },
   topBar:         { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, paddingBottom:16, borderBottom:`2px solid ${G.pale}` },
   roleTag:        { background:G.pale, color:G.navy, borderRadius:20, padding:"4px 14px", fontSize:12, fontWeight:600, border:`1px solid ${G.paleBorder}` },
@@ -369,6 +389,12 @@ const s = {
   statusNoteWarn: { background:G.warningBg, border:"1px solid #ffe082", borderRadius:5, padding:"8px 12px", fontSize:12, color:G.warning, marginTop:8 },
   scNote:         { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:5, padding:"8px 12px", fontSize:12, color:G.success, marginTop:8 },
   // Form
+  purposeSection: { display:"flex", gap:20, marginBottom:20, background:G.pale, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"16px 18px" },
+  purposeLeft:    { minWidth:160, flexShrink:0 },
+  purposeHeading: { fontWeight:700, color:G.navy, fontSize:13, marginBottom:4 },
+  purposeSubtext: { fontSize:11, color:G.muted, lineHeight:1.5 },
+  purposeRight:   { flex:1 },
+  purposeBox:     { width:"100%", border:`1.5px solid ${G.paleBorder}`, borderRadius:6, padding:"9px 12px", fontSize:13, resize:"vertical", outline:"none", boxSizing:"border-box", fontFamily:"'Inter','Segoe UI',Arial,sans-serif", lineHeight:1.5 },
   hodWarning:     { background:G.warningBg, border:"1px solid #ffe082", borderRadius:6, padding:"10px 14px", fontSize:12, color:G.warning, marginBottom:16 },
   headerRow:      { display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:`2.5px solid ${G.primary}`, paddingBottom:16, marginBottom:20 },
   titleArea:      { textAlign:"right" },

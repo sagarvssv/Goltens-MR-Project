@@ -116,6 +116,7 @@ async def invoke(req: Request):
                 "total_cost":         str(round(total_cost, 2)),
                 "status":             "PENDING",
                 "needs_hod_approval": needs_hod,
+                "purpose":            data.get("purpose", ""),
                 "form_type":          data.get("form_type", "material_requisition"),
                 "created_at":         now(),
                 "updated_at":         now(),
@@ -516,16 +517,18 @@ async def invoke(req: Request):
             vessel    = item.get("vessel", "—")
             total     = item.get("total_cost", "0")
 
+            warehouse_note = data.get("warehouse_issue_note", "")
+
             table.update_item(
                 Key={"mr_id": mr_id_val},
-                UpdateExpression="SET #s=:s, issued_by=:ib, warehouse_issued_to_name=:itn, warehouse_issued_to_id=:iti, issued_to_signature=:its, issued_at=:ia, updated_at=:ua",
+                UpdateExpression="SET #s=:s, issued_by=:ib, warehouse_issued_to_name=:itn, warehouse_issued_to_id=:iti, warehouse_issue_note=:win, issued_at=:ia, updated_at=:ua",
                 ExpressionAttributeNames={"#s": "status"},
                 ExpressionAttributeValues={
                     ":s":   "ISSUED",
                     ":ib":  issued_by,
                     ":itn": issued_to,
                     ":iti": data.get("warehouse_issued_to_id", ""),
-                    ":its": data.get("issued_to_signature", ""),
+                    ":win": warehouse_note,
                     ":ia":  now(),
                     ":ua":  now()
                 })
@@ -538,7 +541,8 @@ async def invoke(req: Request):
                 f"Issued By    : {issued_by}\n"
                 f"Total        : AED {total}\n\n"
                 f"Items issued:\n{itxt}\n\n"
-                f"Log in to view full details:\n{PORTAL_URL}" + signature("warehouse")
+                + (f"Warehouse Note: {warehouse_note}\n\n" if warehouse_note else "")
+                + f"Log in to view full details:\n{PORTAL_URL}" + signature("warehouse")
             )
 
             # 1. Notify USER (submitter)
