@@ -1,3 +1,5 @@
+import { G } from "./theme";
+
 /**
  * MRStageTracker.jsx
  * Shows which stage an MR is currently at.

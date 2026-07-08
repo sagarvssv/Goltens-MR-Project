@@ -3,6 +3,9 @@ import { submitMR, getUploadUrl, uploadFileToS3, listMRs } from "./api";
 import GoltensLogo from "./GoltensLogo";
 import MRStageTracker from "./MRStageTracker";
 import { G } from "./theme";
+import NotificationBell from "./NotificationBell";
+import SLABadge, { getSLADays } from "./SLABadge";
+import { downloadMRWithDocs } from "./downloadPDF";
 import HelpChatbot from "./HelpChatbot";
 
 const UOM_OPTIONS = ["Pcs", "Nos", "Set", "Lot", "Kg", "Ltr", "Mtr", "Box"];
@@ -37,6 +40,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [dupWarning, setDupWarning]   = useState(null);
   const [errors, setErrors]         = useState({});
   const [myMRs, setMyMRs]           = useState([]);
   const [loadingMRs, setLoadingMRs] = useState(false);
@@ -47,6 +51,13 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
     setRequestedBy(p => ({ ...p, name: p.name || session?.name || "", id_no: p.id_no || session?.id_no || "" }));
     setDepartment(d => d || session?.department || "");
   }, [session]);
+
+  // Load user's MRs on mount and auto-refresh every 30s
+  useEffect(() => {
+    loadMyMRs();
+    const t = setInterval(loadMyMRs, 120000);
+    return () => clearInterval(t);
+  }, []);
 
   const [approvedBy, setApprovedBy] = useState({ name: "", signature: "", id_no: "" });
   const [receivedBy, setReceivedBy] = useState({ name: "", signature: "", id_no: "" });
@@ -83,6 +94,22 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
 
   const handleSubmit = async () => {
     if (!validate()) return;
+
+    // Duplicate detection — check for same vessel + job number submitted in last 30 days
+    if (myMRs.length > 0 && vessel.trim() && jobNo.trim()) {
+      const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      const dup = myMRs.find(m =>
+        m.vessel?.toLowerCase() === vessel.toLowerCase() &&
+        m.job_no?.toLowerCase() === jobNo.toLowerCase() &&
+        new Date(m.created_at).getTime() > cutoff &&
+        m.status !== "REJECTED"
+      );
+      if (dup && !dupWarning) {
+        setDupWarning(dup);
+        return; // pause — let user confirm
+      }
+    }
+    setDupWarning(null);
     setSubmitting(true); setSubmitError("");
     try {
       const reserved = await call("reserve_mr_id", {});
@@ -139,6 +166,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={s.roleTag}>👤 {session.name || session.email}</span>
               {onBack && <button style={s.backBtn} onClick={onBack}>← Forms</button>}
+              <NotificationBell mrs={myMRs} role="user" userEmail={session?.email} accentColor={G.primary}/>
               <button style={{ ...s.navBtn, ...(view === "form" ? s.navBtnActive : {}) }} onClick={() => setView("form")}>Submit MR</button>
               <button style={{ ...s.navBtn, ...(view === "status" ? s.navBtnActive : {}) }} onClick={() => { setView("status"); loadMyMRs(); }}>My MR Status</button>
             </div>
@@ -149,7 +177,12 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
         {/* ── STATUS VIEW ── */}
         {view === "status" && (
           <div>
-            <div style={s.sectionTitle}>My Submitted MRs</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={s.sectionTitle}>My Submitted MRs</div>
+              <button style={{background:G.pale,border:`1px solid ${G.paleBorder}`,borderRadius:5,padding:"5px 12px",fontSize:12,cursor:"pointer",color:G.navy,fontWeight:600}} onClick={loadMyMRs}>
+                {loadingMRs ? "Loading…" : "↻ Refresh"}
+              </button>
+            </div>
             {loadingMRs ? <div style={{ color: G.muted, padding: 20 }}>Loading…</div>
             : myMRs.length === 0 ? <div style={{ color: "#aaa", padding: 20 }}>No MRs submitted yet.</div>
             : myMRs.map((mr, i) => (
@@ -167,9 +200,11 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
                 </div>
 
                 {/* Expanded detail */}
-                {expandedMR === mr.mr_id && (
+                {expandedMR === mr.mr_id && mr && (
                   <div style={s.mrStatusDetail}>
                     <MRStageTracker status={mr.status} />
+                    <SLABadge mr={mr}/>
+                    <button style={{background:G.primary,color:"#fff",border:"none",borderRadius:5,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:12}} onClick={()=>downloadMRWithDocs(mr)}>⬇ Download PDF</button>
 
                     {/* Key info */}
                     <div style={s.detailGrid}>
@@ -348,6 +383,15 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
             &nbsp;·&nbsp; Item issued by supply chain &nbsp;·&nbsp; FO-552-0201, Rev.06 (Jan 18)
           </div>
 
+          {dupWarning && (
+            <div style={{...s.submitErr, background:"#fff8e1", borderColor:"#ffe082", color:"#b8860b"}}>
+              ⚠ <strong>Possible Duplicate:</strong> You already submitted MR <strong>{dupWarning.mr_id}</strong> for vessel <strong>{dupWarning.vessel}</strong> Job <strong>{dupWarning.job_no}</strong> ({dupWarning.status?.replace(/_/g," ")}).
+              <div style={{marginTop:8,display:"flex",gap:8}}>
+                <button style={{background:"#b8860b",color:"#fff",border:"none",borderRadius:4,padding:"5px 14px",fontSize:12,cursor:"pointer"}} onClick={handleSubmit}>Submit Anyway</button>
+                <button style={{background:G.pale,color:G.navy,border:`1px solid ${G.paleBorder}`,borderRadius:4,padding:"5px 14px",fontSize:12,cursor:"pointer"}} onClick={()=>setDupWarning(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
           {submitError && <div style={s.submitErr}>{submitError}</div>}
           <div style={s.submitRow}>
             <button style={{ ...s.submitBtn, ...(submitting ? {opacity:0.7} : {}) }} onClick={handleSubmit} disabled={submitting}>

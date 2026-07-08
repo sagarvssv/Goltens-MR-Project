@@ -185,11 +185,11 @@ export default function MRDetailView({ mr, onDownloadPDF, showDownload = true })
 
   // Build signatories — always show both Manager and HOD approval rows
   const signatories = [
-    { title: "Requested By",        name: mr.submitted_by_name        || "", id_no: mr.submitted_by_id_no || "", signature: "" },
-    { title: "Approved By (Manager)",name: mr.approved_by || mr.manager_approved_by || "", id_no: "", signature: "" },
-    { title: "Approved By (HOD/GM)", name: mr.hod_approved_by || "", id_no: "", signature: "" },
-    { title: "M.R. Received By",    name: mr.sc_received_by_name      || "", id_no: mr.sc_received_by_id || "", signature: mr.sc_received_by_sig || "" },
-    { title: "Items Issued To",     name: mr.warehouse_issued_to_name || mr.issued_to_name || "", id_no: mr.warehouse_issued_to_id || mr.issued_to_id || "", signature: "" },
+    { title: "Requested By",         name: mr.submitted_by_name        || "",                              id_no: mr.submitted_by_id_no     || "",  signature: "" },
+    { title: "Approved By (Manager)", name: mr.approved_by || mr.manager_approved_by || "",                id_no: mr.manager_id              || "",  signature: "" },
+    { title: "Approved By (HOD/GM)", name: mr.hod_approved_by          || "",                              id_no: mr.hod_id                  || "",  signature: "" },
+    { title: "M.R. Received By",     name: mr.sc_received_by_name      || "",                              id_no: mr.sc_received_by_id       || "",  signature: mr.sc_received_by_sig || "" },
+    { title: "Items Issued To",      name: mr.warehouse_issued_to_name || mr.issued_to_name || "",         id_no: mr.warehouse_issued_to_id  || "",  signature: "" },
   ];
 
   return (

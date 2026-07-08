@@ -22,10 +22,11 @@ USERS_TABLE   = os.getenv("USERS_TABLE", "goltens-users")
 S3_BUCKET     = os.getenv("S3_BUCKET",   "goltens-mr-documents")
 SES_SENDER    = os.getenv("SES_SENDER",  "shashikanth.k@vcloudmaster.com")
 
-MANAGER_EMAIL = "prapul.t@vcloudmaster.com"
-HOD_EMAIL     = "swapna.m@vcloudmaster.com"
-SC_EMAIL      = "hasini.b@vcloudmaster.com"
-WH_EMAIL      = "shabeer.a@vcloudmaster.com"
+MANAGER_EMAIL = "pramod.r@goltens.com"
+HOD_EMAIL     = "gineesh.kg@goltens.com"
+SC_EMAIL      = "nithya.prabhakar@goltens.com"
+WH_EMAIL      = "john.pepset@goltens.com"
+SC_MGR_EMAIL  = "girish.malhotra@goltens.com"
 APPROVAL_SLAB = 5000
 PORTAL_URL    = "http://localhost:5173"
 
@@ -61,13 +62,22 @@ def send_email(to, subject, body):
 def signature(role):
     """Return email signature line for each role."""
     sigs = {
-        "manager":      "Prapul T\nManager, Goltens Co. Ltd. Dubai Branch",
-        "hod":          "Swapna M\nGM / HOD, Goltens Co. Ltd. Dubai Branch",
-        "supply_chain": "Hasini B\nSupply Chain, Goltens Co. Ltd. Dubai Branch",
-        "warehouse":    "Shabeer A\nWarehouse, Goltens Co. Ltd. Dubai Branch",
+        "manager":      "Pramod Raveendran\nManager, Goltens Co. Ltd. Dubai Branch",
+        "hod":          "Gineesh K Gireesan\nGM / HOD, Goltens Co. Ltd. Dubai Branch",
+        "supply_chain": "Nithya Prabhakar\nSupply Chain, Goltens Co. Ltd. Dubai Branch",
+        "warehouse":    "John Pepset\nWarehouse, Goltens Co. Ltd. Dubai Branch",
         "system":       "Goltens MR Portal\nGoltens Co. Ltd. Dubai Branch",
     }
     return "\n\nBest regards,\n" + sigs.get(role, sigs["system"])
+
+
+SC_TEAM_LIST = [
+    {"name": "Nithya Prabhakar",  "email": "nithya.prabhakar@goltens.com"},
+    {"name": "Supply Chain 1",    "email": "sc1@goltens.com"},
+    {"name": "Supply Chain 2",    "email": "sc2@goltens.com"},
+    {"name": "Supply Chain 3",    "email": "sc3@goltens.com"},
+    {"name": "Supply Chain 4",    "email": "sc4@goltens.com"},
+]
 
 @app.post("/invoke")
 async def invoke(req: Request):
@@ -218,6 +228,7 @@ async def invoke(req: Request):
             table = dynamodb.Table(MR_TABLE)
             item  = table.get_item(Key={"mr_id": data["mr_id"]}).get("Item")
             if not item: return {"error": "MR not found"}
+            print(f"approve_mr: approved_by={data.get('approved_by')}, approver_id={data.get('approver_id')}")
 
             itxt = items_text(item.get("items", []))
 
@@ -225,11 +236,12 @@ async def invoke(req: Request):
             if item.get("needs_hod_approval") and item["status"] == "PENDING":
                 table.update_item(
                     Key={"mr_id": data["mr_id"]},
-                    UpdateExpression="SET #s=:s, approved_by=:ab, manager_approved_at=:ma, updated_at=:ua",
+                    UpdateExpression="SET #s=:s, approved_by=:ab, manager_id=:mid, manager_approved_at=:ma, updated_at=:ua",
                     ExpressionAttributeNames={"#s": "status"},
                     ExpressionAttributeValues={
                         ":s":  "PENDING_HOD",
                         ":ab": data["approved_by"],
+                        ":mid": data.get("approver_id", "M-01"),
                         ":ma": now(),
                         ":ua": now()
                     })
@@ -266,11 +278,12 @@ async def invoke(req: Request):
             # Direct approval (below slab)
             table.update_item(
                 Key={"mr_id": data["mr_id"]},
-                UpdateExpression="SET #s=:s, approved_by=:ab, approval_comments=:ac, updated_at=:ua",
+                UpdateExpression="SET #s=:s, approved_by=:ab, manager_id=:mid, approval_comments=:ac, updated_at=:ua",
                 ExpressionAttributeNames={"#s": "status"},
                 ExpressionAttributeValues={
                     ":s":  "APPROVED",
                     ":ab": data["approved_by"],
+                    ":mid": data.get("approver_id", "M-01"),
                     ":ac": data.get("comments", ""),
                     ":ua": now()
                 })
@@ -298,6 +311,21 @@ async def invoke(req: Request):
                 f"Total        : AED {item['total_cost']}\n\n"
                 f"Items to process:\n{itxt}\n\n"
                 f"Log in to Supply Chain portal:\n{PORTAL_URL}" + signature("manager")
+            )
+
+            # Notify SC MANAGER
+            send_email(
+                SC_MGR_EMAIL,
+                f"MR Approved & Assigned to SC — {data['mr_id']}",
+                f"Dear SC Manager,\n\n"
+                f"MR {data['mr_id']} has been approved by Manager {data['approved_by']} "
+                f"and assigned to Supply Chain for processing.\n\n"
+                f"Submitted by : {item['submitted_by_name']}\n"
+                f"Vessel       : {item.get('vessel', '—')}\n"
+                f"Job No.      : {item.get('job_no', '—')}\n"
+                f"Total        : AED {item['total_cost']}\n\n"
+                f"Items:\n{itxt}\n\n"
+                f"Log in to view:\n{PORTAL_URL}" + signature("system")
             )
 
             return {"success": True, "status": "APPROVED"}
@@ -399,7 +427,7 @@ async def invoke(req: Request):
             send_email(
                 WH_EMAIL,
                 f"Items Ready for Issuance — {data['mr_id']}",
-                f"Dear Warehouse Team ({WH_EMAIL}),\n\n"
+                f"Dear Warehouse Team,\n\n"
                 f"MR {data['mr_id']} has been processed by Supply Chain ({sc_name}) "
                 f"and the following items are ready for issuance:\n\n"
                 f"{itxt}\n\n"
@@ -408,6 +436,20 @@ async def invoke(req: Request):
                 f"Total  : AED {item.get('total_cost', '0')}\n\n"
                 f"{'Collection Note: ' + wh_comment if wh_comment else ''}\n\n"
                 f"Please log in to the Warehouse portal to confirm issuance:\n{PORTAL_URL}" + signature("supply_chain")
+            )
+
+            # Notify SC MANAGER
+            send_email(
+                SC_MGR_EMAIL,
+                f"MR Received by SC — {data['mr_id']}",
+                f"Dear SC Manager,\n\n"
+                f"MR {data['mr_id']} has been received and processed by Supply Chain ({sc_name}).\n\n"
+                f"Items being processed:\n{itxt}\n\n"
+                f"Vessel : {item.get('vessel', '—')}\n"
+                f"Job No.: {item.get('job_no', '—')}\n"
+                f"Total  : AED {item.get('total_cost', '0')}\n\n"
+                f"{'SC Note: ' + wh_comment if wh_comment else ''}\n\n"
+                f"Log in to view:\n{PORTAL_URL}" + signature("system")
             )
 
             return {"success": True}
@@ -456,6 +498,19 @@ async def invoke(req: Request):
                 f"Please action via the Warehouse portal once stock is available:\n{PORTAL_URL}" + signature("supply_chain")
             )
 
+            # Notify SC MANAGER
+            send_email(
+                SC_MGR_EMAIL,
+                f"MR In Process — Stock Unavailable — {data['mr_id']}",
+                f"Dear SC Manager,\n\n"
+                f"MR {data['mr_id']} has been marked IN PROCESS by {actioned} due to stock unavailability.\n\n"
+                f"Items pending stock:\n{itxt}\n\n"
+                f"Note: {note}\n\n"
+                f"Vessel : {item.get('vessel', '—')}\n"
+                f"Job No.: {item.get('job_no', '—')}\n\n"
+                f"Log in to view:\n{PORTAL_URL}" + signature("system")
+            )
+
             return {"success": True, "status": "IN_PROCESS"}
 
         # ── HOD Approve MR ────────────────────────────────────────────────────
@@ -468,11 +523,12 @@ async def invoke(req: Request):
 
             table.update_item(
                 Key={"mr_id": data["mr_id"]},
-                UpdateExpression="SET #s=:s, hod_approved_by=:ab, hod_comments=:ac, updated_at=:ua",
+                UpdateExpression="SET #s=:s, hod_approved_by=:ab, hod_id=:hid, hod_comments=:ac, updated_at=:ua",
                 ExpressionAttributeNames={"#s": "status"},
                 ExpressionAttributeValues={
                     ":s":  "APPROVED",
                     ":ab": data["approved_by"],
+                    ":hid": data.get("approver_id", "H-01"),
                     ":ac": data.get("comments", ""),
                     ":ua": now()
                 })
@@ -498,7 +554,22 @@ async def invoke(req: Request):
                 f"Job No.      : {item.get('job_no', '—')}\n"
                 f"Total        : AED {item['total_cost']}\n\n"
                 f"Items to process:\n{itxt}\n\n"
-                f"Log in to Supply Chain portal:\n{PORTAL_URL}" + signature("manager")
+                f"Log in to Supply Chain portal:\n{PORTAL_URL}" + signature("hod")
+            )
+
+            # Notify SC MANAGER
+            send_email(
+                SC_MGR_EMAIL,
+                f"MR HOD-Approved & Assigned to SC — {data['mr_id']}",
+                f"Dear SC Manager,\n\n"
+                f"MR {data['mr_id']} has been approved by HOD {data['approved_by']} "
+                f"and assigned to Supply Chain for processing.\n\n"
+                f"Submitted by : {item['submitted_by_name']}\n"
+                f"Vessel       : {item.get('vessel', '—')}\n"
+                f"Job No.      : {item.get('job_no', '—')}\n"
+                f"Total        : AED {item['total_cost']}\n\n"
+                f"Items:\n{itxt}\n\n"
+                f"Log in to view:\n{PORTAL_URL}" + signature("system")
             )
 
             return {"success": True, "status": "APPROVED"}
@@ -576,12 +647,21 @@ async def invoke(req: Request):
             send_email(
                 item.get("assigned_to", SC_EMAIL),
                 f"Items Issued — Job No: {job_no} — MR {mr_id_val}",
-                f"Dear Supply Chain (Hasini),\n\n"
+                f"Dear Supply Chain,\n\n"
                 f"Items for Job No: {job_no} have been successfully issued by Warehouse.\n\n"
                 + email_body_base
             )
 
-            print(f"Issuance notifications sent to User, Manager, HOD and Supply Chain for {mr_id_val}")
+            # 5. Notify SC MANAGER
+            send_email(
+                SC_MGR_EMAIL,
+                f"Items Issued — Job No: {job_no} — MR {mr_id_val}",
+                f"Dear SC Manager,\n\n"
+                f"Items for Job No: {job_no} have been issued by Warehouse.\n\n"
+                + email_body_base
+            )
+
+            print(f"Issuance notifications sent to User, Manager, HOD, Supply Chain and SC Manager for {mr_id_val}")
             return {"success": True, "status": "ISSUED"}
 
         # ── Revert MR ─────────────────────────────────────────────────────────
@@ -682,6 +762,38 @@ async def invoke(req: Request):
                         print(f"Fallback also failed: {e2}")
                         return {"reply": "AI service unavailable. Please enable Amazon Bedrock Claude access in your AWS console.", "error": str(e2)}
                 return {"reply": "Chatbot unavailable. Please check Bedrock model access.", "error": str(e)}
+
+
+        # ── Reassign MR (SC Manager) ──────────────────────────────────────────
+        elif action == "reassign_mr":
+            table = dynamodb.Table(MR_TABLE)
+            item  = table.get_item(Key={"mr_id": data["mr_id"]}).get("Item")
+            if not item: return {"error": "MR not found"}
+
+            new_assignee  = data["assigned_to"]
+            reassigned_by = data.get("reassigned_by", "SC Manager")
+            old_assignee  = item.get("assigned_to", "")
+            member_name   = next((m["name"] for m in SC_TEAM_LIST if m["email"] == new_assignee), new_assignee)
+
+            table.update_item(
+                Key={"mr_id": data["mr_id"]},
+                UpdateExpression="SET assigned_to=:at, reassigned_by=:rb, updated_at=:ua",
+                ExpressionAttributeValues={":at": new_assignee, ":rb": reassigned_by, ":ua": now()}
+            )
+
+            # Notify new assignee
+            send_email(
+                new_assignee,
+                f"MR Assigned to You — {data['mr_id']}",
+                f"Dear {member_name},\n\n"
+                f"MR {data['mr_id']} has been assigned to you by SC Manager {reassigned_by}.\n\n"
+                f"Vessel : {item.get('vessel','—')}\n"
+                f"Job No.: {item.get('job_no','—')}\n"
+                f"Total  : AED {item.get('total_cost','0')}\n\n"
+                f"Log in to Supply Chain portal:\n{PORTAL_URL}" + signature("supply_chain")
+            )
+
+            return {"success": True, "assigned_to": new_assignee}
 
         return {"error": f"Unknown action: {action}"}
 

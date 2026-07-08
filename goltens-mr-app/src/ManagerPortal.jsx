@@ -1,102 +1,133 @@
-
-function Analytics({ mrs }) {
-  const [jobFilter, setJobFilter] = useState("all");
-
-  const jobs = ["all", ...new Set(mrs.map(m => m.job_no || "Unassigned"))];
-
-  const filtered = jobFilter === "all" ? mrs : mrs.filter(m => (m.job_no || "Unassigned") === jobFilter);
-
-  const projects = {};
-  filtered.forEach(mr => {
-    const key = mr.job_no || "Unassigned";
-    if (!projects[key]) projects[key] = { job_no:key, count:0, total:0, pending:0, approved:0, rejected:0, inprocess:0 };
-    projects[key].count++;
-    projects[key].total += parseFloat(mr.total_cost || 0);
-    if (["PENDING","PENDING_HOD"].includes(mr.status)) projects[key].pending++;
-    else if (mr.status === "APPROVED" || mr.status === "ISSUED") projects[key].approved++;
-    else if (mr.status === "REJECTED") projects[key].rejected++;
-    else if (mr.status === "IN_PROCESS") projects[key].inprocess++;
-  });
-
-  const list       = Object.values(projects).sort((a,b) => b.total - a.total);
-  const maxTotal   = Math.max(...list.map(p => p.total), 1);
-  const totalSpend = filtered.reduce((s,m) => s + parseFloat(m.total_cost||0), 0);
-  const statusCounts = {};
-  filtered.forEach(m => { statusCounts[m.status] = (statusCounts[m.status]||0)+1; });
-
-  return (
-    <div>
-      {/* Filter bar */}
-      <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20, background:G.pale, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"12px 16px" }}>
-        <div>
-          <div style={{ fontSize:11, fontWeight:600, color:G.muted, textTransform:"uppercase", marginBottom:4 }}>Job Number</div>
-          <select style={{ border:`1px solid ${G.paleBorder}`, borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:G.navy, fontWeight:600, background:"#fff", minWidth:180 }}
-            value={jobFilter} onChange={e => setJobFilter(e.target.value)}>
-            {jobs.map(j => <option key={j} value={j}>{j === "all" ? "All Job Numbers" : "Job No: " + j}</option>)}
-          </select>
-        </div>
-        <div style={{ marginLeft:"auto", fontSize:12, color:G.muted }}>Showing <strong>{filtered.length}</strong> of {mrs.length} MRs</div>
-      </div>
-
-      {/* Summary cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:12, marginBottom:24 }}>
-        {[
-          ["Total MRs",   filtered.length,                                                             G.navy],
-          ["Total Spend", `AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`,       G.primary],
-          ["Pending",     (statusCounts["PENDING"]||0)+(statusCounts["PENDING_HOD"]||0),               "#b8860b"],
-          ["Approved",    (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0),                   G.success],
-          ["Rejected",    statusCounts["REJECTED"]||0,                                                 G.danger],
-        ].map(([label,val,color]) => (
-          <div key={label} style={{ background:G.white, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"14px 16px", textAlign:"center" }}>
-            <div style={{ fontSize:20, fontWeight:700, color, marginBottom:4 }}>{val}</div>
-            <div style={{ fontSize:11, color:G.muted, fontWeight:600, textTransform:"uppercase" }}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Bar chart per project */}
-      <div style={{ fontWeight:700, fontSize:13, color:G.navy, marginBottom:12, textTransform:"uppercase", paddingBottom:4, borderBottom:`2px solid ${G.primary}` }}>Spend by Job Number</div>
-      {list.length === 0 ? <div style={{ color:"#aaa" }}>No MRs yet.</div> : (
-        <div>
-          {list.map(p => (
-            <div key={p.job_no} style={{ marginBottom:14 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:G.navy, marginBottom:4 }}>{"Job No: " + p.job_no}</div>
-              <div style={{ background:G.pale, borderRadius:4, height:24, position:"relative", overflow:"visible" }}>
-                <div style={{ background:`linear-gradient(90deg,${G.primary},${G.steel})`, borderRadius:4, height:"100%", width:`${(p.total/maxTotal)*100}%`, minWidth:4, transition:"width 0.5s" }}/>
-                <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:11, fontWeight:600, color:G.navy }}>
-                  AED {p.total.toLocaleString("en-AE",{minimumFractionDigits:0})}
-                </span>
-              </div>
-              <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
-                <span style={{ background:"#eaf1fb", color:G.primary, borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.count} MRs</span>
-                {p.pending>0   && <span style={{ background:"#fff8e1", color:"#b8860b",  borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.pending} pending</span>}
-                {p.approved>0  && <span style={{ background:"#e8f5e9", color:G.success,  borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.approved} approved</span>}
-                {p.rejected>0  && <span style={{ background:"#fff5f5", color:G.danger,   borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.rejected} rejected</span>}
-                {p.inprocess>0 && <span style={{ background:"#fff8e1", color:"#b8860b",  borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{p.inprocess} in process</span>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 import { useState, useEffect } from "react";
-import { listMRs, approveMR, rejectMR, markInProcessMR } from "./api";
+import { listMRs, approveMR, rejectMR } from "./api";
 import MRDetailView from "./MRDetailView";
 import MRForm from "./MRForm";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
-import { downloadMRWithDocs } from "./downloadPDF";
+import { HOD_EMAIL, APPROVAL_SLAB } from "./App";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import FormSelectionModal from "./FormSelectionModal";
+import SearchBar from "./SearchBar";
+import NotificationBell from "./NotificationBell";
+import SLABadge, { getSLADays } from "./SLABadge";
+import { downloadMRWithDocs } from "./downloadPDF";
 import HelpChatbot from "./HelpChatbot";
-import { HOD_EMAIL, APPROVAL_SLAB } from "./App";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
-async function call(action,data={}) {
+async function call(action,data={}){
   const res=await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
-  if(!res.ok) throw new Error(`${res.status}`); return res.json();
+  if(!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+const COLORS = ["#1B6CA8","#1a7a4a","#b8860b","#c0392b","#7b1fa2","#00838f","#e65100"];
+
+function Analytics({ mrs }) {
+  const [jobFilter, setJobFilter] = useState("all");
+  const jobs = ["all",...new Set(mrs.map(m=>m.job_no||"Unassigned"))];
+  const filtered = jobFilter==="all"?mrs:mrs.filter(m=>(m.job_no||"Unassigned")===jobFilter);
+
+  const byJob = {};
+  filtered.forEach(mr=>{
+    const k=mr.job_no||"Unassigned";
+    if(!byJob[k]) byJob[k]={job:`Job No: ${k}`,total:0,pending:0,approved:0,rejected:0};
+    byJob[k].total+=parseFloat(mr.total_cost||0);
+    if(["PENDING","PENDING_HOD"].includes(mr.status)) byJob[k].pending++;
+    else if(mr.status==="APPROVED"||mr.status==="ISSUED") byJob[k].approved++;
+    else if(mr.status==="REJECTED") byJob[k].rejected++;
+  });
+  const barData = Object.values(byJob).sort((a,b)=>b.total-a.total).slice(0,10);
+
+  const statusCounts={};
+  filtered.forEach(m=>{statusCounts[m.status]=(statusCounts[m.status]||0)+1;});
+  const pieData = Object.entries(statusCounts).map(([name,value])=>({name:name.replace(/_/g," "),value}));
+  const totalSpend = filtered.reduce((s,m)=>s+parseFloat(m.total_cost||0),0);
+  const slaCount = filtered.filter(m=>getSLADays(m)!==null).length;
+
+  return (
+    <div>
+      {/* Filter */}
+      <div style={{display:"flex",gap:16,marginBottom:20,background:G.pale,border:`1px solid ${G.paleBorder}`,borderRadius:8,padding:"12px 16px",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:600,color:G.muted,textTransform:"uppercase",marginBottom:4}}>Job Number</div>
+          <select style={{border:`1px solid ${G.paleBorder}`,borderRadius:5,padding:"6px 10px",fontSize:12,outline:"none",color:G.navy,fontWeight:600,background:"#fff",minWidth:180}}
+            value={jobFilter} onChange={e=>setJobFilter(e.target.value)}>
+            {jobs.map(j=><option key={j} value={j}>{j==="all"?"All Jobs":"Job No: "+j}</option>)}
+          </select>
+        </div>
+        <div style={{marginLeft:"auto",fontSize:12,color:G.muted}}>Showing <strong>{filtered.length}</strong> of {mrs.length} MRs</div>
+      </div>
+
+      {/* KPI Cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+        {[
+          ["Total MRs",    filtered.length,  G.navy,    "📋"],
+          ["Total Spend",  `AED ${(totalSpend/1000).toFixed(0)}K`, G.primary, "💰"],
+          ["Approved",     (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0), G.success, "✅"],
+          ["SLA Breaches", slaCount, slaCount>0?"#e53935":G.success, "⚠"],
+        ].map(([l,v,c,icon])=>(
+          <div key={l} style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px",borderLeft:`4px solid ${c}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:24,fontWeight:800,color:c}}>{v}</div>
+                <div style={{fontSize:11,color:G.muted,fontWeight:600,textTransform:"uppercase",marginTop:3}}>{l}</div>
+              </div>
+              <span style={{fontSize:24}}>{icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20,marginBottom:24}}>
+        {/* Bar chart spend by job */}
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Spend by Job Number (AED)</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={barData} margin={{left:10,right:20}}>
+              <CartesianGrid strokeDasharray="3 3"/>
+              <XAxis dataKey="job" tick={{fontSize:10}} interval={0} angle={-20} textAnchor="end" height={50}/>
+              <YAxis tick={{fontSize:10}}/>
+              <Tooltip formatter={(v)=>`AED ${v.toLocaleString("en-AE",{minimumFractionDigits:0})}`}/>
+              <Bar dataKey="total" name="Total Spend" fill={G.primary} radius={[4,4,0,0]}>
+                {barData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Pie status */}
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Status Distribution</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="45%" outerRadius={75} dataKey="value" label={({name,value})=>`${value}`} labelLine={false}>
+                {pieData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
+              </Pie>
+              <Tooltip formatter={(v,name)=>[v,name]}/>
+              <Legend wrapperStyle={{fontSize:10}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Approval breakdown bar */}
+      <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+        <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Approval Status by Job Number</div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={barData} margin={{left:10,right:20}}>
+            <CartesianGrid strokeDasharray="3 3"/>
+            <XAxis dataKey="job" tick={{fontSize:10}} interval={0} angle={-20} textAnchor="end" height={50}/>
+            <YAxis tick={{fontSize:10}}/>
+            <Tooltip/>
+            <Legend wrapperStyle={{fontSize:11}}/>
+            <Bar dataKey="pending"  name="Pending"  stackId="a" fill="#b8860b"/>
+            <Bar dataKey="approved" name="Approved" stackId="a" fill={G.success}/>
+            <Bar dataKey="rejected" name="Rejected" stackId="a" fill={G.danger} radius={[4,4,0,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 }
 
 
@@ -119,16 +150,17 @@ export default function ManagerPortal({ session, onLogout }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,30000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); },[]);
   useEffect(()=>{ if(selected&&mrs.length>0){ const u=mrs.find(m=>m.mr_id===selected.mr_id); if(u)setSelected(u); } },[mrs]);
 
   const filteredMRs = filterByFormType(mrs, formFilter);
   const openMR = mr => { setSelected(mr); setActionDone(null); setRejComment(""); setRejectErr(""); setEscalateNote(""); };
-  const actor  = session.name||session.email;
+  const actor      = session.name || session.email;
+  const managerId  = session.id_no || "M-01";
 
   const doApprove = async () => {
     setActioning(true);
-    const r = await approveMR(selected.mr_id, actor);
+    const r = await approveMR(selected.mr_id, actor, "", managerId);
     if(r?.success!==false){ setActionDone(r?.status==="PENDING_HOD"?"ESCALATED_HOD":"APPROVED"); loadMRs(); }
     setActioning(false);
   };
@@ -178,6 +210,10 @@ export default function ManagerPortal({ session, onLogout }) {
         <div style={s.sidebar}>
           <div style={s.sideHeader}><GoltensLogo size="sm" dark style={{flexShrink:0}}/></div>
           <div style={s.portalLabel}>Manager Portal</div>
+          <div style={s.topActions}>
+            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
+            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
+          </div>
 
           <div style={s.sideSection}>NAVIGATION</div>
           {[
@@ -209,15 +245,15 @@ export default function ManagerPortal({ session, onLogout }) {
             </div>
           ))}
 
-          <div style={s.sideFooter}>
-            <div style={s.pendingNote}>{pendingCount} pending review</div>
-            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
-            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
-          </div>
+          
         </div>
 
         {/* ── Main ── */}
         <div style={s.main}>
+          <div style={s.topBar}>
+            <SearchBar mrs={mrs} onSelect={mr=>{openMR(mr);setView("queue");}} />
+            <NotificationBell mrs={mrs} role="manager" userEmail={session.email} accentColor={G.navy}/>
+          </div>
 
           {/* Analytics */}
           {view==="analytics" && (
@@ -310,6 +346,7 @@ export default function ManagerPortal({ session, onLogout }) {
               </div>
             ) : (
               <div>
+                <SLABadge mr={selected}/>
                 <MRDetailView mr={selected} showDownload onDownloadPDF={()=>downloadMRWithDocs(selected)} />
 
                 {/* Decision panel */}
@@ -454,6 +491,7 @@ const s = {
   pendingNote:  { fontSize:11, color:"rgba(255,255,255,0.5)" },
   refreshBtn:   { background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
   logoutBtn:    { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.15)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
+  topBar:        { display:"flex", alignItems:"center", gap:10, marginBottom:20, background:"#fff", borderRadius:8, padding:"10px 16px", boxShadow:`0 1px 4px rgba(0,0,0,0.08)`, border:`1px solid ${G.paleBorder}` },
   main:         { flex:1, padding:"28px 32px", overflowY:"auto" },
   pageTitle:    { fontWeight:700, fontSize:18, color:G.navy, marginBottom:20, paddingBottom:12, borderBottom:`2px solid ${G.primary}` },
   emptyState:   { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60vh" },

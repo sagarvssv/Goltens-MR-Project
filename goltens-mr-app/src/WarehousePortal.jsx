@@ -42,7 +42,7 @@ export default function WarehousePortal({ session, onLogout }) {
 
   useEffect(() => {
     loadMRs();
-    const t = setInterval(loadMRs, 30000);
+    const t = setInterval(loadMRs, 120000);
     return () => clearInterval(t);
   }, []);
 
@@ -95,6 +95,10 @@ export default function WarehousePortal({ session, onLogout }) {
             <GoltensLogo size="sm" dark style={{ flexShrink: 0 }} />
           </div>
           <div style={s.portalLabel}>Warehouse Portal</div>
+          <div style={s.topActions}>
+            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
+            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
+          </div>
 
           <div style={{padding:"6px 12px"}}>
             <FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="rgba(255,255,255,0.9)" compact/>
@@ -119,11 +123,7 @@ export default function WarehousePortal({ session, onLogout }) {
             </div>
           ))}
 
-          <div style={s.sideFooter}>
-            <div style={s.pendingNote}>{pendingCount} pending issuance</div>
-            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
-            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
-          </div>
+          
         </div>
 
         {/* Main */}

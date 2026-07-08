@@ -1,132 +1,174 @@
-
-function Analytics({ mrs }) {
-  const [deptFilter, setDeptFilter]     = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-
-  const departments = ["all", ...new Set(mrs.map(m => m.department || "Unassigned").filter(Boolean))];
-  const statuses    = ["all","PENDING","PENDING_HOD","APPROVED","REJECTED","IN_PROCESS","ISSUED"];
-
-  const filtered = mrs.filter(m => {
-    const deptOk   = deptFilter   === "all" || (m.department||"Unassigned") === deptFilter;
-    const statusOk = statusFilter === "all" || m.status === statusFilter;
-    return deptOk && statusOk;
-  });
-
-  const byDept = {};
-  filtered.forEach(mr => {
-    const d = mr.department || "Unassigned";
-    if (!byDept[d]) byDept[d] = { count:0, total:0, statuses:{} };
-    byDept[d].count++;
-    byDept[d].total += parseFloat(mr.total_cost||0);
-    byDept[d].statuses[mr.status] = (byDept[d].statuses[mr.status]||0)+1;
-  });
-  const deptList = Object.entries(byDept).sort((a,b) => b[1].total - a[1].total);
-  const maxTotal = Math.max(...deptList.map(([,v]) => v.total), 1);
-  const totalSpend = filtered.reduce((s,m) => s + parseFloat(m.total_cost||0), 0);
-  const statusCounts = {};
-  filtered.forEach(m => { statusCounts[m.status] = (statusCounts[m.status]||0)+1; });
-
-  const byJob = {};
-  filtered.forEach(mr => {
-    const j = mr.job_no || "Unassigned";
-    if (!byJob[j]) byJob[j] = { count:0, total:0 };
-    byJob[j].count++;
-    byJob[j].total += parseFloat(mr.total_cost||0);
-  });
-
-  return (
-    <div>
-      {/* Filter bar */}
-      <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20, background:"#f3e5f5", border:"1px solid #ce93d8", borderRadius:8, padding:"12px 16px", flexWrap:"wrap" }}>
-        <div>
-          <div style={{ fontSize:11, fontWeight:600, color:"#4a148c", textTransform:"uppercase", marginBottom:4 }}>Department</div>
-          <select style={{ border:"1px solid #ce93d8", borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:"#4a148c", fontWeight:600, background:"#fff", minWidth:180 }}
-            value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
-            {departments.map(d => <option key={d} value={d}>{d === "all" ? "All Departments" : d}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{ fontSize:11, fontWeight:600, color:"#4a148c", textTransform:"uppercase", marginBottom:4 }}>Status</div>
-          <select style={{ border:"1px solid #ce93d8", borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:"#4a148c", fontWeight:600, background:"#fff", minWidth:180 }}
-            value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            {statuses.map(s => <option key={s} value={s}>{s === "all" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
-          </select>
-        </div>
-        <div style={{ marginLeft:"auto", fontSize:12, color:"#4a148c" }}>Showing <strong>{filtered.length}</strong> of {mrs.length} MRs</div>
-      </div>
-
-      {/* Summary cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:24 }}>
-        {[
-          ["Total MRs",    filtered.length,  "#4a148c"],
-          ["Total Spend",  `AED ${totalSpend.toLocaleString("en-AE",{minimumFractionDigits:2})}`, G.primary],
-          ["Approved",     (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0), G.success],
-          ["Pending HOD",  statusCounts["PENDING_HOD"]||0, "#7b1fa2"],
-        ].map(([l,v,c]) => (
-          <div key={l} style={{ background:G.white, border:"1px solid #ce93d8", borderRadius:8, padding:"14px 16px", textAlign:"center" }}>
-            <div style={{ fontSize:20, fontWeight:700, color:c, marginBottom:4 }}>{v}</div>
-            <div style={{ fontSize:11, color:G.muted, fontWeight:600, textTransform:"uppercase" }}>{l}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Department bar chart */}
-      <div style={{ fontWeight:700, fontSize:13, color:"#4a148c", marginBottom:12, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #4a148c" }}>Spend by Department</div>
-      {deptList.length === 0 ? <div style={{ color:"#aaa", marginBottom:20 }}>No data for selected filters.</div> : (
-        <div style={{ marginBottom:24 }}>
-          {deptList.map(([dept,v]) => (
-            <div key={dept} style={{ marginBottom:12 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:"#4a148c", marginBottom:4 }}>{dept}</div>
-              <div style={{ background:"#f3e5f5", borderRadius:4, height:24, position:"relative" }}>
-                <div style={{ background:"linear-gradient(90deg,#7b1fa2,#4a148c)", borderRadius:4, height:"100%", width:`${(v.total/maxTotal)*100}%`, minWidth:4 }}/>
-                <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:11, fontWeight:600, color:"#4a148c" }}>
-                  AED {v.total.toLocaleString("en-AE",{minimumFractionDigits:0})}
-                </span>
-              </div>
-              <div style={{ display:"flex", gap:6, marginTop:4, flexWrap:"wrap" }}>
-                <span style={{ background:"#f3e5f5", color:"#4a148c", borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{v.count} MRs</span>
-                {Object.entries(v.statuses).map(([st,cnt]) => (
-                  <span key={st} style={{ background:G.pale, color:G.navy, borderRadius:10, padding:"2px 8px", fontSize:10, fontWeight:600 }}>{st.replace(/_/g," ")}: {cnt}</span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Job No table */}
-      <div style={{ fontWeight:700, fontSize:13, color:"#4a148c", marginBottom:12, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #4a148c" }}>Spend by Job Number</div>
-      {Object.keys(byJob).length === 0 ? <div style={{ color:"#aaa" }}>No data.</div> : (
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-          <thead><tr>{["Job No.","MR Count","Total Spend (AED)"].map(h => <th key={h} style={{ background:"#4a148c", color:"#fff", padding:"8px 10px", textAlign:"left", fontWeight:600, fontSize:11 }}>{h}</th>)}</tr></thead>
-          <tbody>{Object.entries(byJob).sort((a,b) => b[1].total-a[1].total).map(([j,v],i) => (
-            <tr key={j} style={{ background: i%2===0 ? "#fff" : G.pale }}>
-              <td style={{ padding:"7px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>Job No: {j}</td>
-              <td style={{ padding:"7px 10px", borderBottom:`1px solid ${G.paleBorder}` }}>{v.count}</td>
-              <td style={{ padding:"7px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>AED {v.total.toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
-            </tr>
-          ))}</tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
 import { useState, useEffect } from "react";
 import { listMRs } from "./api";
 import MRDetailView from "./MRDetailView";
 import MRForm from "./MRForm";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
-import { downloadMRWithDocs } from "./downloadPDF";
+import { MANAGER_EMAIL, APPROVAL_SLAB } from "./App";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import FormSelectionModal from "./FormSelectionModal";
+import SearchBar from "./SearchBar";
+import NotificationBell from "./NotificationBell";
+import SLABadge, { getSLADays } from "./SLABadge";
+import { downloadMRWithDocs } from "./downloadPDF";
 import HelpChatbot from "./HelpChatbot";
-import { MANAGER_EMAIL, APPROVAL_SLAB } from "./App";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 
-async function call(action,data={}) {
-  const res=await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
-  if(!res.ok) throw new Error(`${res.status}`); return res.json();
+
+async function call(action, data={}) {
+  const res = await fetch("/invoke", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action,data})});
+  if(!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+const COLORS_HOD = ["#4a148c","#1B6CA8","#0d6b4e","#b8860b","#c0392b","#00838f"];
+
+function Analytics({ mrs }) {
+  const [deptFilter, setDeptFilter]     = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const departments = ["all",...new Set(mrs.map(m=>m.department||"Unassigned"))];
+  const statuses    = ["all","PENDING","PENDING_HOD","APPROVED","REJECTED","IN_PROCESS","ISSUED"];
+  const filtered    = mrs.filter(m=>{
+    const d = deptFilter==="all"||(m.department||"Unassigned")===deptFilter;
+    const s = statusFilter==="all"||m.status===statusFilter;
+    return d&&s;
+  });
+
+  const byDept={};
+  filtered.forEach(mr=>{
+    const d=mr.department||"Unassigned";
+    if(!byDept[d]) byDept[d]={name:d,spend:0,PENDING:0,PENDING_HOD:0,APPROVED:0,IN_PROCESS:0,ISSUED:0,REJECTED:0};
+    byDept[d].spend+=parseFloat(mr.total_cost||0);
+    if(byDept[d][mr.status]!==undefined) byDept[d][mr.status]++;
+  });
+  const deptData=Object.values(byDept).sort((a,b)=>b.spend-a.spend);
+
+  // Monthly trend
+  const byMonth={};
+  filtered.forEach(mr=>{
+    const d=mr.date_requested||mr.created_at?.split("T")[0];
+    if(!d) return;
+    const m=d.substring(0,7);
+    byMonth[m]=(byMonth[m]||0)+1;
+  });
+  const trendData=Object.entries(byMonth).sort().map(([month,count])=>({month,count}));
+
+  const statusCounts={};
+  filtered.forEach(m=>{statusCounts[m.status]=(statusCounts[m.status]||0)+1;});
+  const pieData=Object.entries(statusCounts).map(([name,value])=>({name:name.replace(/_/g," "),value}));
+  const totalSpend=filtered.reduce((s,m)=>s+parseFloat(m.total_cost||0),0);
+  const slaCount=filtered.filter(m=>getSLADays(m)!==null).length;
+  const hodPending=filtered.filter(m=>m.status==="PENDING_HOD").length;
+
+  return (
+    <div>
+      {/* Filters */}
+      <div style={{display:"flex",gap:16,marginBottom:20,background:"#f3e5f5",border:"1px solid #ce93d8",borderRadius:8,padding:"12px 16px",alignItems:"center",flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:600,color:"#4a148c",textTransform:"uppercase",marginBottom:4}}>Department</div>
+          <select style={{border:"1px solid #ce93d8",borderRadius:5,padding:"6px 10px",fontSize:12,outline:"none",color:"#4a148c",fontWeight:600,background:"#fff",minWidth:180}}
+            value={deptFilter} onChange={e=>setDeptFilter(e.target.value)}>
+            {departments.map(d=><option key={d} value={d}>{d==="all"?"All Departments":d}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{fontSize:11,fontWeight:600,color:"#4a148c",textTransform:"uppercase",marginBottom:4}}>Status</div>
+          <select style={{border:"1px solid #ce93d8",borderRadius:5,padding:"6px 10px",fontSize:12,outline:"none",color:"#4a148c",fontWeight:600,background:"#fff",minWidth:160}}
+            value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+            {statuses.map(s=><option key={s} value={s}>{s==="all"?"All Statuses":s.replace(/_/g," ")}</option>)}
+          </select>
+        </div>
+        <div style={{marginLeft:"auto",fontSize:12,color:"#4a148c"}}>Showing <strong>{filtered.length}</strong> of {mrs.length} MRs</div>
+      </div>
+
+      {/* KPI cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+        {[
+          ["Total MRs",    filtered.length,   "#4a148c","📋"],
+          ["Total Spend",  `AED ${(totalSpend/1000).toFixed(0)}K`, G.primary,"💰"],
+          ["HOD Pending",  hodPending,         "#7b1fa2","🔺"],
+          ["SLA Breaches", slaCount,           slaCount>0?"#e53935":G.success,"⚠"],
+        ].map(([l,v,c,icon])=>(
+          <div key={l} style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px",borderLeft:`4px solid ${c}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:24,fontWeight:800,color:c}}>{v}</div>
+                <div style={{fontSize:11,color:G.muted,fontWeight:600,textTransform:"uppercase",marginTop:3}}>{l}</div>
+              </div>
+              <span style={{fontSize:24}}>{icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20,marginBottom:24}}>
+        {/* Dept grouped bar */}
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#4a148c",marginBottom:14}}>Department Spend (AED)</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={deptData} margin={{left:10,right:20}}>
+              <CartesianGrid strokeDasharray="3 3"/>
+              <XAxis dataKey="name" tick={{fontSize:10}} interval={0} angle={-15} textAnchor="end" height={50}/>
+              <YAxis tick={{fontSize:10}}/>
+              <Tooltip formatter={v=>`AED ${v.toLocaleString("en-AE",{minimumFractionDigits:0})}`}/>
+              <Bar dataKey="spend" name="Total Spend" radius={[4,4,0,0]}>
+                {deptData.map((_,i)=><Cell key={i} fill={COLORS_HOD[i%COLORS_HOD.length]}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Pie */}
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#4a148c",marginBottom:14}}>Status Split</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value">
+                {pieData.map((_,i)=><Cell key={i} fill={COLORS_HOD[i%COLORS_HOD.length]}/>)}
+              </Pie>
+              <Tooltip/>
+              <Legend wrapperStyle={{fontSize:10}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Monthly trend */}
+      {trendData.length>1 && (
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px",marginBottom:24}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#4a148c",marginBottom:14}}>Monthly Submission Trend</div>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={trendData} margin={{left:10,right:20}}>
+              <CartesianGrid strokeDasharray="3 3"/>
+              <XAxis dataKey="month" tick={{fontSize:10}}/>
+              <YAxis tick={{fontSize:10}}/>
+              <Tooltip/>
+              <Line type="monotone" dataKey="count" name="MRs Submitted" stroke="#4a148c" strokeWidth={2} dot={{r:4}}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Dept stacked bar by status */}
+      <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+        <div style={{fontWeight:700,fontSize:13,color:"#4a148c",marginBottom:14}}>Department Status Breakdown</div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={deptData} margin={{left:10,right:20}}>
+            <CartesianGrid strokeDasharray="3 3"/>
+            <XAxis dataKey="name" tick={{fontSize:10}} interval={0} angle={-15} textAnchor="end" height={50}/>
+            <YAxis tick={{fontSize:10}}/>
+            <Tooltip/>
+            <Legend wrapperStyle={{fontSize:11}}/>
+            <Bar dataKey="PENDING_HOD" name="Pending HOD" stackId="a" fill="#7b1fa2"/>
+            <Bar dataKey="APPROVED"    name="Approved"    stackId="a" fill={G.success}/>
+            <Bar dataKey="ISSUED"      name="Issued"      stackId="a" fill="#0d6b4e"/>
+            <Bar dataKey="REJECTED"    name="Rejected"    stackId="a" fill={G.danger} radius={[4,4,0,0]}/>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 }
 
 
@@ -148,16 +190,16 @@ export default function HODPortal({ session, onLogout }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,30000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); },[]);
   useEffect(()=>{ if(selected&&mrs.length>0){ const u=mrs.find(m=>m.mr_id===selected.mr_id); if(u)setSelected(u); } },[mrs]);
 
   const filteredMRs = filterByFormType(mrs, formFilter);
   const openMR = mr => { setSelected(mr); setActionDone(null); setRejComment(""); setRejectErr(""); };
-  const actor  = session.name||session.email;
+  const actor  = session.name || session.email;
 
   const doApprove = async () => {
     setActioning(true);
-    const r = await call("hod_approve_mr",{mr_id:selected.mr_id,approved_by:actor,comments:""});
+    const r = await call("hod_approve_mr",{mr_id:selected.mr_id,approved_by:actor,approver_id:session.id_no||"H-01",comments:""});
     if(r?.success!==false){ setActionDone("APPROVED"); loadMRs(); }
     setActioning(false);
   };
@@ -186,11 +228,15 @@ export default function HODPortal({ session, onLogout }) {
         <div style={s.sidebar}>
           <div style={s.sideHeader}><GoltensLogo size="sm" dark style={{flexShrink:0}}/></div>
           <div style={s.portalLabel}>GM / HOD Portal</div>
+          <div style={s.topActions}>
+            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
+            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
+          </div>
           <div style={s.sideSection}>NAVIGATION</div>
           {[{key:"queue",label:"📋 Pending Approval"},{key:"analytics",label:"📊 Analytics"},{key:"all",label:"🔍 All MR Status"},{key:"submit",label:"➕ Submit New Form"}].map(({key,label})=>(
             <div key={key} style={{...s.navItem,...(view===key?s.navItemActive:{})}} onClick={()=>{ if(key==="submit"){setShowFormModal(true);}else{setView(key);} }}>{label}</div>
           ))}
-          <div style={{padding:"6px 12px"}}>
+          <div style={{padding:"0 12px 4px"}}>
             <FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="rgba(255,255,255,0.9)" compact/>
           </div>
           <div style={s.sideSection}>PENDING HOD ({pendingHOD.length})</div>
@@ -206,14 +252,14 @@ export default function HODPortal({ session, onLogout }) {
               <div style={{display:"inline-block",marginTop:5,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:"rgba(206,147,216,0.3)",color:"#e1bee7"}}>PENDING HOD</div>
             </div>
           ))}
-          <div style={s.sideFooter}>
-            <div style={s.pendingNote}>{pendingHOD.length} awaiting HOD approval</div>
-            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
-            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
-          </div>
+          
         </div>
 
         <div style={s.main}>
+          <div style={s.topBar}>
+            <SearchBar mrs={mrs} onSelect={mr=>{openMR(mr);setView("queue");}} />
+            <NotificationBell mrs={mrs} role="hod" userEmail={session.email} accentColor={"#4a148c"}/>
+          </div>
           {view==="analytics"&&(<div><div style={s.pageTitle}>Project Analytics</div><FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="#4a148c"/><Analytics mrs={filteredMRs}/></div>)}
 
           {view==="all"&&(
@@ -339,6 +385,7 @@ const s = {
   pendingNote:{fontSize:11,color:"rgba(255,255,255,0.5)"},
   refreshBtn:{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
   logoutBtn:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
+  topBar:        { display:"flex", alignItems:"center", gap:10, marginBottom:20, background:"#fff", borderRadius:8, padding:"10px 16px", boxShadow:`0 1px 4px rgba(0,0,0,0.08)`, border:`1px solid ${G.paleBorder}` },
   main:{flex:1,padding:"28px 32px",overflowY:"auto"},
   pageTitle:{fontWeight:700,fontSize:18,color:"#4a148c",marginBottom:20,paddingBottom:12,borderBottom:"2px solid #4a148c"},
   emptyState:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh"},

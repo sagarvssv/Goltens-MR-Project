@@ -14,7 +14,7 @@ export const getUserProfile  = (email)                          => call("get_use
 export const getUploadUrl    = (file_name, file_type, mr_id)    => call("get_upload_url",    { file_name, file_type, mr_id });
 export const submitMR        = (data)                           => call("submit_mr",          data);
 export const listMRs         = (status_filter = "ALL")          => call("list_mrs",           { status_filter });
-export const approveMR       = (mr_id, approved_by, comments="")=> call("approve_mr",         { mr_id, approved_by, comments });
+export const approveMR       = (mr_id, approved_by, comments="", approver_id="") => call("approve_mr", { mr_id, approved_by, comments, approver_id });
 export const rejectMR        = (mr_id, rejected_by, reason)     => call("reject_mr",          { mr_id, rejected_by, reason });
 export const markInProcessMR = (mr_id, actioned_by, note="")    => call("mark_inprocess_mr",  { mr_id, actioned_by, note });
 export const deleteDocument  = (mr_id, s3_key)                  => call("delete_document",    { mr_id, s3_key });

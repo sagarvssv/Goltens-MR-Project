@@ -1,3 +1,5 @@
+import { G } from "./theme";
+
 /**
  * GoltensLogo.jsx
  * SVG recreation of the Goltens logo mark + wordmark.

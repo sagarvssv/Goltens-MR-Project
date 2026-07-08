@@ -3,6 +3,10 @@ import { listMRs } from "./api";
 import MRDetailView from "./MRDetailView";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
+import SearchBar from "./SearchBar";
+import NotificationBell from "./NotificationBell";
+import SLABadge, { getSLADays } from "./SLABadge";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { downloadMRWithDocs } from "./downloadPDF";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import HelpChatbot from "./HelpChatbot";
@@ -35,7 +39,7 @@ export default function SupplyChainPortal({ session, onLogout }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,30000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); },[]);
 
   const [formFilter, setFormFilter] = useState("all");
   const [scPortalView, setScPortalView] = useState("queue"); // queue | analytics
@@ -87,6 +91,10 @@ export default function SupplyChainPortal({ session, onLogout }) {
             <GoltensLogo size="sm" dark style={{flexShrink:0}}/>
           </div>
           <div style={s.portalLabel}>Supply Chain Portal</div>
+          <div style={s.topActions}>
+            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
+            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
+          </div>
           <div style={{padding:"8px 12px 4px"}}>
             <div style={{display:"flex",gap:6,marginBottom:8}}>
               <button style={{flex:1,padding:"6px",borderRadius:5,border:"none",background:scPortalView==="queue"?"#0d6b4e":"rgba(255,255,255,0.15)",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}} onClick={()=>setScPortalView("queue")}>📋 Queue</button>
@@ -109,15 +117,15 @@ export default function SupplyChainPortal({ session, onLogout }) {
               </div>
             </div>
           ))}
-          <div style={s.sideFooter}>
-            <div style={s.pendingNote}>{pendingCount} in queue</div>
-            <button style={s.refreshBtn} onClick={loadMRs}>↻ Refresh</button>
-            <button style={s.logoutBtn} onClick={onLogout}>Log Out</button>
-          </div>
+          
         </div>
 
         {/* Main */}
         <div style={s.main}>
+          <div style={s.topBar}>
+            <SearchBar mrs={mrs} onSelect={mr=>{openMR(mr);setScPortalView("queue");}} />
+            <NotificationBell mrs={mrs} role="supply_chain" userEmail={session.email} accentColor="#0d6b4e"/>
+          </div>
           {scPortalView==="analytics" && (
             <div>
               <div style={{fontWeight:700,fontSize:18,color:"#0d6b4e",marginBottom:20,paddingBottom:12,borderBottom:"2px solid #0d6b4e"}}>Supply Chain Analytics</div>
@@ -195,6 +203,7 @@ const s = {
   pendingNote:{fontSize:11,color:"rgba(255,255,255,0.5)"},
   refreshBtn:{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
   logoutBtn:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
+  topBar:{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#fff",borderRadius:8,padding:"10px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",border:"1px solid #B8D4E8"},
   main:{flex:1,padding:"28px 32px",overflowY:"auto"},
   emptyState:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh"},
   actionPanel:{background:"#fafbfc",border:`1px solid ${G.paleBorder}`,borderRadius:8,padding:"20px 24px",marginTop:16},
@@ -214,137 +223,127 @@ const s = {
 
 
 
+const COLORS_SC = ["#0d6b4e","#1B6CA8","#b8860b","#c0392b","#4a148c"];
+
 function SCAnalytics({ mrs }) {
   const [deptFilter, setDeptFilter] = useState("all");
-  const safeMrs     = Array.isArray(mrs) ? mrs : [];
-  const departments = ["all", ...new Set(safeMrs.map(m => m.department || "Unassigned"))];
-  const filtered    = deptFilter === "all" ? safeMrs : safeMrs.filter(m => (m.department||"Unassigned") === deptFilter);
+  const safeMrs     = Array.isArray(mrs)?mrs:[];
+  const departments = ["all",...new Set(safeMrs.map(m=>m.department||"Unassigned"))];
+  const filtered    = deptFilter==="all"?safeMrs:safeMrs.filter(m=>(m.department||"Unassigned")===deptFilter);
 
-  const pendingMRs   = filtered.filter(m => m.status === "APPROVED");
-  const inProcessMRs = filtered.filter(m => m.status === "IN_PROCESS");
-  const issuedMRs    = filtered.filter(m => m.status === "ISSUED");
+  const pendingMRs   = filtered.filter(m=>m.status==="APPROVED");
+  const inProcessMRs = filtered.filter(m=>m.status==="IN_PROCESS");
+  const issuedMRs    = filtered.filter(m=>m.status==="ISSUED");
 
-  // Dept wise items
-  const byDept = {};
-  filtered.forEach(mr => {
-    const d = mr.department || "Unassigned";
-    if (!byDept[d]) byDept[d] = { issued:0, pending:0, inprocess:0, total:0, items:[] };
-    if (mr.status === "ISSUED")      byDept[d].issued++;
-    else if (mr.status === "IN_PROCESS") byDept[d].inprocess++;
-    else                             byDept[d].pending++;
-    byDept[d].total += parseFloat(mr.total_cost||0);
-    (mr.items||[]).forEach(it => byDept[d].items.push({ ...it, mr_id: mr.mr_id }));
+  const pieData = [
+    {name:"Pending Procurement", value:pendingMRs.length,   fill:"#b8860b"},
+    {name:"In Process",          value:inProcessMRs.length, fill:"#1B6CA8"},
+    {name:"Issued",              value:issuedMRs.length,    fill:"#0d6b4e"},
+  ].filter(d=>d.value>0);
+
+  const byDept={};
+  filtered.forEach(mr=>{
+    const d=mr.department||"Unassigned";
+    if(!byDept[d]) byDept[d]={name:d,APPROVED:0,IN_PROCESS:0,ISSUED:0,spend:0};
+    if(byDept[d][mr.status]!==undefined) byDept[d][mr.status]++;
+    byDept[d].spend+=parseFloat(mr.total_cost||0);
   });
+  const deptData=Object.values(byDept);
+
+  if(filtered.length===0) return (
+    <div style={{textAlign:"center",padding:"60px 20px",color:"#aaa"}}>
+      <div style={{fontSize:40,marginBottom:12}}>📊</div>
+      <div style={{fontSize:14,fontWeight:600}}>No MR data for selected filter</div>
+    </div>
+  );
 
   return (
     <div>
       {/* Filter */}
-      <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20, background:"#e0f2f1", border:"1px solid #b2dfdb", borderRadius:8, padding:"12px 16px" }}>
+      <div style={{display:"flex",gap:16,marginBottom:20,background:"#e0f2f1",border:"1px solid #b2dfdb",borderRadius:8,padding:"12px 16px",alignItems:"center"}}>
         <div>
-          <div style={{ fontSize:11, fontWeight:600, color:"#0d6b4e", textTransform:"uppercase", marginBottom:4 }}>Department</div>
-          <select style={{ border:"1px solid #b2dfdb", borderRadius:5, padding:"6px 10px", fontSize:12, outline:"none", color:"#0d6b4e", fontWeight:600, background:"#fff", minWidth:180 }}
-            value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
-            {departments.map(d => <option key={d} value={d}>{d === "all" ? "All Departments" : d}</option>)}
+          <div style={{fontSize:11,fontWeight:600,color:"#0d6b4e",textTransform:"uppercase",marginBottom:4}}>Department</div>
+          <select style={{border:"1px solid #b2dfdb",borderRadius:5,padding:"6px 10px",fontSize:12,outline:"none",color:"#0d6b4e",fontWeight:600,background:"#fff",minWidth:180}}
+            value={deptFilter} onChange={e=>setDeptFilter(e.target.value)}>
+            {departments.map(d=><option key={d} value={d}>{d==="all"?"All Departments":d}</option>)}
           </select>
         </div>
-        <div style={{ marginLeft:"auto", fontSize:12, color:"#0d6b4e" }}>Showing <strong>{filtered.length}</strong> of {safeMrs.length} MRs</div>
+        <div style={{marginLeft:"auto",fontSize:12,color:"#0d6b4e"}}>Showing <strong>{filtered.length}</strong> of {safeMrs.length} MRs</div>
       </div>
 
-      {filtered.length === 0 && (
-        <div style={{ textAlign:"center", padding:"40px 20px", color:"#aaa" }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>📊</div>
-          <div style={{ fontSize:14, fontWeight:600 }}>No MR data for selected filter</div>
-          <div style={{ fontSize:12, marginTop:6 }}>Try selecting "All Departments"</div>
-        </div>
-      )}
-      {filtered.length > 0 && <>
-      {/* Summary */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:24 }}>
+      {/* KPI cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:24}}>
         {[
-          ["Pending Procurement", pendingMRs.length,   "#b8860b"],
-          ["In Process (Stock)",  inProcessMRs.length, G.primary],
-          ["Issued",              issuedMRs.length,    G.success],
-        ].map(([l,v,c]) => (
-          <div key={l} style={{ background:"#fff", border:"1px solid #b2dfdb", borderRadius:8, padding:"14px 16px", textAlign:"center" }}>
-            <div style={{ fontSize:24, fontWeight:700, color:c, marginBottom:4 }}>{v}</div>
-            <div style={{ fontSize:11, color:"#0d6b4e", fontWeight:600, textTransform:"uppercase" }}>{l}</div>
+          ["Pending Procurement", pendingMRs.length,   "#b8860b","⏳"],
+          ["In Process",          inProcessMRs.length, G.primary,"🔄"],
+          ["Issued",              issuedMRs.length,    G.success,"✅"],
+        ].map(([l,v,c,icon])=>(
+          <div key={l} style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px",borderLeft:`4px solid ${c}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:28,fontWeight:800,color:c}}>{v}</div>
+                <div style={{fontSize:11,color:G.muted,fontWeight:600,textTransform:"uppercase",marginTop:3}}>{l}</div>
+              </div>
+              <span style={{fontSize:28}}>{icon}</span>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Pending Procurement */}
-      <div style={{ fontWeight:700, fontSize:13, color:"#0d6b4e", marginBottom:10, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #0d6b4e" }}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+        {/* Pie */}
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:14}}>Processing Stage Split</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${value}`} labelLine>
+                {pieData.map((entry,i)=><Cell key={i} fill={entry.fill}/>)}
+              </Pie>
+              <Tooltip/>
+              <Legend wrapperStyle={{fontSize:11}}/>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Dept stacked bar */}
+        <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:14}}>Department Wise MR Stages</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={deptData} margin={{left:0,right:10}}>
+              <CartesianGrid strokeDasharray="3 3"/>
+              <XAxis dataKey="name" tick={{fontSize:9}} interval={0} angle={-15} textAnchor="end" height={45}/>
+              <YAxis tick={{fontSize:10}}/>
+              <Tooltip/>
+              <Legend wrapperStyle={{fontSize:10}}/>
+              <Bar dataKey="APPROVED"   name="Pending Issuance" stackId="a" fill="#1B6CA8"/>
+              <Bar dataKey="IN_PROCESS" name="In Process"       stackId="a" fill="#b8860b"/>
+              <Bar dataKey="ISSUED"     name="Issued"           stackId="a" fill="#0d6b4e" radius={[4,4,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Pending table */}
+      <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:10,textTransform:"uppercase",paddingBottom:4,borderBottom:"2px solid #0d6b4e"}}>
         Pending Procurement ({pendingMRs.length})
       </div>
-      {pendingMRs.length === 0 ? <div style={{ color:"#aaa", marginBottom:20 }}>No pending MRs.</div> : (
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:24 }}>
-          <thead><tr>{["MR Number","Vessel","Department","Job No.","Submitted By","Total (AED)"].map(h =>
-            <th key={h} style={{ background:"#0d6b4e", color:"#fff", padding:"7px 10px", textAlign:"left", fontSize:11, fontWeight:600 }}>{h}</th>
-          )}</tr></thead>
-          <tbody>{pendingMRs.map((mr,i) => (
-            <tr key={mr.mr_id} style={{ background: i%2===0 ? "#fff" : "#e0f2f1" }}>
-              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb", fontWeight:600 }}>{mr.mr_id}</td>
-              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.vessel}</td>
-              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.department||"—"}</td>
-              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.job_no}</td>
-              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb" }}>{mr.submitted_by_name}</td>
-              <td style={{ padding:"6px 10px", borderBottom:"1px solid #b2dfdb", fontWeight:600 }}>AED {parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+      {pendingMRs.length===0?<div style={{color:"#aaa",marginBottom:20}}>No pending MRs.</div>:(
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginBottom:20}}>
+          <thead><tr>{["MR Number","Vessel","Department","Job No.","Submitted By","Total (AED)"].map(h=>(
+            <th key={h} style={{background:"#0d6b4e",color:"#fff",padding:"7px 10px",textAlign:"left",fontSize:11,fontWeight:600}}>{h}</th>
+          ))}</tr></thead>
+          <tbody>{pendingMRs.map((mr,i)=>(
+            <tr key={mr.mr_id} style={{background:i%2===0?"#fff":"#e0f2f1"}}>
+              <td style={{padding:"6px 10px",borderBottom:"1px solid #b2dfdb",fontWeight:600}}>{mr.mr_id}</td>
+              <td style={{padding:"6px 10px",borderBottom:"1px solid #b2dfdb"}}>{mr.vessel}</td>
+              <td style={{padding:"6px 10px",borderBottom:"1px solid #b2dfdb"}}>{mr.department||"—"}</td>
+              <td style={{padding:"6px 10px",borderBottom:"1px solid #b2dfdb"}}>{mr.job_no}</td>
+              <td style={{padding:"6px 10px",borderBottom:"1px solid #b2dfdb"}}>{mr.submitted_by_name}</td>
+              <td style={{padding:"6px 10px",borderBottom:"1px solid #b2dfdb",fontWeight:600}}>AED {parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
             </tr>
           ))}</tbody>
         </table>
       )}
-
-      {/* In Process */}
-      {inProcessMRs.length > 0 && (
-        <>
-          <div style={{ fontWeight:700, fontSize:13, color:"#0d6b4e", marginBottom:10, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #0d6b4e" }}>
-            In Process — Awaiting Stock ({inProcessMRs.length})
-          </div>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:24 }}>
-            <thead><tr>{["MR Number","Job No.","Note","Total (AED)"].map(h =>
-              <th key={h} style={{ background:"#1B6CA8", color:"#fff", padding:"7px 10px", textAlign:"left", fontSize:11, fontWeight:600 }}>{h}</th>
-            )}</tr></thead>
-            <tbody>{inProcessMRs.map((mr,i) => (
-              <tr key={mr.mr_id} style={{ background: i%2===0 ? "#fff" : G.pale }}>
-                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>{mr.mr_id}</td>
-                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}` }}>{mr.job_no}</td>
-                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}` }}>{mr.inprocess_note||"—"}</td>
-                <td style={{ padding:"6px 10px", borderBottom:`1px solid ${G.paleBorder}`, fontWeight:600 }}>AED {parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </>
-      )}
-
-      {/* Dept wise issued */}
-      <div style={{ fontWeight:700, fontSize:13, color:"#0d6b4e", marginBottom:10, textTransform:"uppercase", paddingBottom:4, borderBottom:"2px solid #0d6b4e" }}>
-        Department Wise Items
-      </div>
-      {Object.entries(byDept).map(([dept, v]) => (
-        <div key={dept} style={{ marginBottom:16, border:"1px solid #b2dfdb", borderRadius:8, overflow:"hidden" }}>
-          <div style={{ background:"#0d6b4e", color:"#fff", padding:"8px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <span style={{ fontWeight:700, fontSize:13 }}>{dept}</span>
-            <span style={{ fontSize:11 }}>{v.issued} Issued · {v.pending} Pending · {v.inprocess} In Process · AED {v.total.toLocaleString("en-AE",{minimumFractionDigits:0})}</span>
-          </div>
-          {v.items.length > 0 && (
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
-              <thead><tr>{["Item Code","Description","Qty","UOM","Est. Cost (AED)"].map(h =>
-                <th key={h} style={{ background:"#e0f2f1", color:"#0d6b4e", padding:"5px 10px", textAlign:"left", fontSize:10, fontWeight:600 }}>{h}</th>
-              )}</tr></thead>
-              <tbody>{v.items.slice(0,15).map((it,i) => (
-                <tr key={i} style={{ background: i%2===0 ? "#fff" : "#f5fffe" }}>
-                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.item_code||"—"}</td>
-                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.description}</td>
-                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.qty}</td>
-                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>{it.uom}</td>
-                  <td style={{ padding:"4px 10px", borderBottom:"1px solid #e0f2f1" }}>AED {parseFloat(it.estimated_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          )}
-        </div>
-      ))}
-      </>}
     </div>
   );
 }

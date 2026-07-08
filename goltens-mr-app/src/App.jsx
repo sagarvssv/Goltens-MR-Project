@@ -4,31 +4,37 @@ import ManagerPortal from "./ManagerPortal";
 import SupplyChainPortal from "./SupplyChainPortal";
 import HODPortal from "./HODPortal";
 import WarehousePortal from "./WarehousePortal";
+import SCManagerPortal from "./SCManagerPortal";
 import FormSelector from "./FormSelector";
 import GoltensLogo from "./GoltensLogo";
 import { getUserProfile } from "./api";
 import { G } from "./theme";
 
 const CREDENTIALS = [
-  { email: "shashikanth.k@vcloudmaster.com", password: "user123",    role: "user",         name: "Shashikanth" },
-  { email: "prapul.t@vcloudmaster.com",      password: "manager123", role: "manager",      name: "Prapul"      },
-  { email: "swapna.m@vcloudmaster.com",      password: "hod123",     role: "hod",          name: "Swapna"      },
-  { email: "hasini.b@vcloudmaster.com",      password: "sc123",      role: "supply_chain", name: "Hasini"      },
-  { email: "shabeer.a@vcloudmaster.com",     password: "wh123",      role: "warehouse",    name: "Shabeer"     },
+  { email: "britto.nayagam@goltens.com",    password: "user123",     role: "user",         name: "Britto S Nayagam",  id_no: "U-01"  },
+  { email: "pramod.r@goltens.com",           password: "manager123",  role: "manager",      name: "Pramod Raveendran", id_no: "M-01"  },
+  { email: "gineesh.kg@goltens.com",         password: "hod123",      role: "hod",          name: "Gineesh K Gireesan",id_no: "H-01"  },
+  { email: "nithya.prabhakar@goltens.com",   password: "sc123",       role: "supply_chain", name: "Nithya Prabhakar",  id_no: "SC-01" },
+  { email: "girish.malhotra@goltens.com",    password: "scmgr123",    role: "sc_manager",   name: "Girish Malhotra",   id_no: "SC-02" },
+  { email: "john.pepset@goltens.com",        password: "wh123",       role: "warehouse",    name: "John Pepset",       id_no: "WH-01" },
 ];
 
-export const MANAGER_EMAIL = "prapul.t@vcloudmaster.com";
-export const HOD_EMAIL     = "swapna.m@vcloudmaster.com";
-export const SC_EMAIL      = "hasini.b@vcloudmaster.com";
-export const APPROVAL_SLAB = 5000;
+export const MANAGER_EMAIL  = "pramod.r@goltens.com";
+export const HOD_EMAIL      = "gineesh.kg@goltens.com";
+export const SC_EMAIL       = "nithya.prabhakar@goltens.com";
+export const SC_MGR_EMAIL   = "girish.malhotra@goltens.com";
+export const APPROVAL_SLAB  = 5000;
+export const SLA_PENDING    = 2;   // days before PENDING flagged
+export const SLA_PENDING_HOD = 3;  // days before PENDING_HOD flagged
+export const SLA_APPROVED   = 5;   // days before APPROVED (waiting SC) flagged
 
 export default function App() {
-  const [session, setSession]       = useState(null);
-  const [selectedForm, setSelectedForm] = useState(null); // null = form selector not passed yet
-  const [email, setEmail]           = useState("");
-  const [password, setPassword]     = useState("");
-  const [error, setError]           = useState("");
-  const [loading, setLoading]       = useState(false);
+  const [session, setSession]           = useState(null);
+  const [selectedForm, setSelectedForm] = useState(null);
+  const [email, setEmail]               = useState("");
+  const [password, setPassword]         = useState("");
+  const [error, setError]               = useState("");
+  const [loading, setLoading]           = useState(false);
 
   const handleLogin = async () => {
     setError("");
@@ -42,69 +48,46 @@ export default function App() {
         email:      email.toLowerCase(),
         role:       cred.role,
         name:       profile?.name || cred.name || "",
-        id_no:      profile?.id_no || "",
+        id_no:      profile?.id_no || cred.id_no || "",
         department: profile?.department || "",
       });
     } catch {
-      setSession({ email: email.toLowerCase(), role: cred.role, name: cred.name, id_no: "", department: "" });
+      setSession({ email: email.toLowerCase(), role: cred.role, name: cred.name, id_no: cred.id_no, department: "" });
     }
     setLoading(false);
   };
 
-  const handleLogout = () => {
-    setSession(null); setSelectedForm(null); setEmail(""); setPassword(""); setError("");
-  };
+  const handleLogout      = () => { setSession(null); setSelectedForm(null); setEmail(""); setPassword(""); setError(""); };
+  const handleFormSelect  = (formId) => setSelectedForm(formId);
+  const handleBackToSelector = () => setSelectedForm(null);
 
-  const handleFormSelect = (formId) => {
-    setSelectedForm(formId);
-  };
-
-  const handleBackToSelector = () => {
-    setSelectedForm(null);
-  };
-
-  // ── Routed portals — manager, HOD, SC, warehouse skip form selector ──
   if (session) {
-    if (session.role === "manager")      return <ManagerPortal session={session} onLogout={handleLogout} />;
+    if (session.role === "manager")      return <ManagerPortal    session={session} onLogout={handleLogout} />;
     if (session.role === "supply_chain") return <SupplyChainPortal session={session} onLogout={handleLogout} />;
-    if (session.role === "hod")          return <HODPortal session={session} onLogout={handleLogout} />;
-    if (session.role === "warehouse")    return <WarehousePortal session={session} onLogout={handleLogout} />;
+    if (session.role === "hod")          return <HODPortal         session={session} onLogout={handleLogout} />;
+    if (session.role === "warehouse")    return <WarehousePortal   session={session} onLogout={handleLogout} />;
+    if (session.role === "sc_manager")   return <SCManagerPortal   session={session} onLogout={handleLogout} />;
 
-    // ── User role: show form selector first, then selected form ──
     if (session.role === "user") {
-      if (!selectedForm) {
-        return <FormSelector session={session} onSelect={handleFormSelect} onLogout={handleLogout} />;
-      }
-      // Route to the correct form based on selection
+      if (!selectedForm) return <FormSelector session={session} onSelect={handleFormSelect} onLogout={handleLogout} />;
       if (selectedForm === "material_requisition") {
-        return (
-          <MRForm
-            session={session}
-            managerEmail={MANAGER_EMAIL}
-            hodEmail={HOD_EMAIL}
-            approvalSlab={APPROVAL_SLAB}
-            formType={selectedForm}
-            onLogout={handleLogout}
-            onBack={handleBackToSelector}
-          />
-        );
+        return <MRForm session={session} managerEmail={MANAGER_EMAIL} hodEmail={HOD_EMAIL}
+          approvalSlab={APPROVAL_SLAB} formType={selectedForm} onLogout={handleLogout} onBack={handleBackToSelector} />;
       }
-      // Placeholder for future forms
       return (
         <div style={ph.page}>
           <div style={ph.card}>
-            <GoltensLogo size="md" style={{ marginBottom: 20 }} />
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🚧</div>
-            <h2 style={{ color: G.navy }}>Form Coming Soon</h2>
-            <p style={{ color: G.muted }}>This form is not yet available. Please check back later.</p>
-            <button style={ph.btn} onClick={handleBackToSelector}>← Back to Form Selection</button>
+            <GoltensLogo size="md" style={{ marginBottom:20 }} />
+            <div style={{ fontSize:48, marginBottom:16 }}>🚧</div>
+            <h2 style={{ color:G.navy }}>Coming Soon</h2>
+            <p style={{ color:G.muted }}>This form is not yet available.</p>
+            <button style={ph.btn} onClick={handleBackToSelector}>← Back to Forms</button>
           </div>
         </div>
       );
     }
   }
 
-  // ── Login page ──
   return (
     <div style={s.page}>
       <div style={s.banner}>
@@ -112,34 +95,33 @@ export default function App() {
         <span style={s.bannerTag}>Material Requisition Portal</span>
       </div>
       <div style={s.card}>
-        <GoltensLogo size="lg" style={{ marginBottom: 28, justifyContent: "center" }} />
+        <GoltensLogo size="lg" style={{ marginBottom:28, justifyContent:"center" }} />
         <h2 style={s.title}>Sign In</h2>
         <p style={s.sub}>Access your portal to submit or review material requisitions.</p>
         <div style={s.fieldGroup}>
           <label style={s.label}>Email Address</label>
-          <input style={s.input} type="email" placeholder="yourname@vcloudmaster.com"
-            value={email} onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          <input style={s.input} type="email" placeholder="name@goltens.com"
+            value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key==="Enter" && handleLogin()} />
         </div>
         <div style={s.fieldGroup}>
           <label style={s.label}>Password</label>
           <input style={s.input} type="password" placeholder="••••••••"
-            value={password} onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleLogin()} />
+            value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key==="Enter" && handleLogin()} />
         </div>
         {error && <div style={s.errMsg}>{error}</div>}
         <button style={s.loginBtn} onClick={handleLogin} disabled={loading}>
           {loading ? "Signing in…" : "Sign In"}
         </button>
         <div style={s.hintBox}>
-          <div style={s.hintTitle}>Demo credentials</div>
+          <div style={s.hintTitle}>Portal Credentials</div>
           {[
-            ["User",         "Shashikanth", "shashikanth.k@vcloudmaster.com", "user123"],
-            ["Manager",      "Prapul",      "prapul.t@vcloudmaster.com",      "manager123"],
-            ["GM / HOD",     "Swapna",      "swapna.m@vcloudmaster.com",      "hod123"],
-            ["Supply Chain", "Hasini",      "hasini.b@vcloudmaster.com",      "sc123"],
-            ["Warehouse",    "Shabeer",     "shabeer.a@vcloudmaster.com",     "wh123"],
-          ].map(([role, name, em, pw]) => (
+            ["User",         "Britto S Nayagam",   "britto.nayagam@goltens.com",  "user123"  ],
+            ["Manager",      "Pramod Raveendran",   "pramod.r@goltens.com",        "manager123"],
+            ["GM / HOD",     "Gineesh K Gireesan",  "gineesh.kg@goltens.com",      "hod123"   ],
+            ["Supply Chain", "Nithya Prabhakar",    "nithya.prabhakar@goltens.com","sc123"    ],
+            ["SC Manager",   "Girish Malhotra",     "girish.malhotra@goltens.com", "scmgr123" ],
+            ["Warehouse",    "John Pepset",         "john.pepset@goltens.com",     "wh123"    ],
+          ].map(([role,name,em,pw]) => (
             <div key={role} style={s.hintRow}>
               <span style={s.hintRole}>{role}</span>
               <span style={s.hintName}>{name}</span>
@@ -155,28 +137,27 @@ export default function App() {
 }
 
 const ph = {
-  page: { minHeight:"100vh", background:G.pale, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI', Arial, sans-serif" },
-  card: { background:"#fff", borderRadius:12, padding:"48px 56px", textAlign:"center", boxShadow:"0 4px 24px rgba(0,0,0,0.1)", maxWidth:400 },
-  btn:  { marginTop:24, background:G.primary, color:"#fff", border:"none", borderRadius:6, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer" },
+  page:{ minHeight:"100vh", background:G.pale, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter','Segoe UI',system-ui,Arial,sans-serif" },
+  card:{ background:"#fff", borderRadius:12, padding:"48px 56px", textAlign:"center", boxShadow:"0 4px 24px rgba(0,0,0,0.1)", maxWidth:400 },
+  btn: { marginTop:24, background:G.primary, color:"#fff", border:"none", borderRadius:6, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer" },
 };
-
 const s = {
-  page:      { minHeight:"100vh", background:`linear-gradient(135deg, ${G.navy} 0%, ${G.primary} 60%, ${G.steel} 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Segoe UI', Arial, sans-serif", padding:"20px 16px" },
-  banner:    { display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", maxWidth:540, marginBottom:24, padding:"0 4px" },
+  page:      { minHeight:"100vh", background:`linear-gradient(135deg,${G.navy} 0%,${G.primary} 60%,${G.steel} 100%)`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Inter','Segoe UI',system-ui,Arial,sans-serif", padding:"20px 16px" },
+  banner:    { display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", maxWidth:560, marginBottom:24, padding:"0 4px" },
   bannerTag: { color:"rgba(255,255,255,0.75)", fontSize:13, fontStyle:"italic" },
-  card:      { background:G.white, borderRadius:12, boxShadow:"0 8px 40px rgba(0,0,0,0.25)", padding:"36px 40px 32px", width:"100%", maxWidth:540 },
+  card:      { background:G.white, borderRadius:12, boxShadow:"0 8px 40px rgba(0,0,0,0.25)", padding:"36px 40px 32px", width:"100%", maxWidth:560 },
   title:     { fontSize:22, fontWeight:700, color:G.navy, marginBottom:6, textAlign:"center" },
   sub:       { fontSize:12, color:G.muted, marginBottom:24, textAlign:"center" },
   fieldGroup:{ marginBottom:16 },
   label:     { display:"block", fontSize:12, fontWeight:600, color:G.navy, marginBottom:5 },
   input:     { width:"100%", border:`1.5px solid ${G.paleBorder}`, borderRadius:6, padding:"10px 12px", fontSize:13, outline:"none", boxSizing:"border-box" },
   errMsg:    { background:G.dangerBg, color:G.danger, border:`1px solid #f5c6c6`, borderRadius:4, padding:"8px 12px", fontSize:12, marginBottom:14 },
-  loginBtn:  { width:"100%", background:`linear-gradient(135deg, ${G.primary}, ${G.navy})`, color:G.white, border:"none", borderRadius:6, padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:20 },
+  loginBtn:  { width:"100%", background:`linear-gradient(135deg,${G.primary},${G.navy})`, color:G.white, border:"none", borderRadius:6, padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:20 },
   hintBox:   { background:G.pale, borderRadius:8, padding:"14px 16px", border:`1px solid ${G.paleBorder}` },
   hintTitle: { fontWeight:700, color:G.navy, marginBottom:8, textTransform:"uppercase", letterSpacing:0.5, fontSize:10 },
-  hintRow:   { display:"flex", alignItems:"center", gap:6, marginBottom:5, fontSize:11 },
-  hintRole:  { background:G.primary, color:G.white, borderRadius:10, padding:"2px 10px", fontSize:10, fontWeight:700, minWidth:82, textAlign:"center" },
-  hintName:  { color:G.navy, fontWeight:700, minWidth:72 },
+  hintRow:   { display:"flex", alignItems:"center", gap:6, marginBottom:5, fontSize:11, flexWrap:"wrap" },
+  hintRole:  { background:G.primary, color:G.white, borderRadius:10, padding:"2px 10px", fontSize:10, fontWeight:700, minWidth:90, textAlign:"center" },
+  hintName:  { color:G.navy, fontWeight:700, minWidth:80 },
   hintEmail: { color:G.muted, fontWeight:400, flex:1 },
   hintPw:    { color:G.muted },
   footer:    { marginTop:24, color:"rgba(255,255,255,0.5)", fontSize:11, textAlign:"center" },
