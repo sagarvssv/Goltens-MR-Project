@@ -12,6 +12,7 @@ import NotificationBell from "./NotificationBell";
 import SLABadge, { getSLADays } from "./SLABadge";
 import { downloadMRWithDocs } from "./downloadPDF";
 import HelpChatbot from "./HelpChatbot";
+import TableFilterHeader, { useTableFilter } from "./TableFilter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 async function call(action,data={}){
@@ -64,7 +65,7 @@ function Analytics({ mrs }) {
           ["Total MRs",    filtered.length,  G.navy,    "📋"],
           ["Total Spend",  `AED ${(totalSpend/1000).toFixed(0)}K`, G.primary, "💰"],
           ["Approved",     (statusCounts["APPROVED"]||0)+(statusCounts["ISSUED"]||0), G.success, "✅"],
-          ["SLA Breaches", slaCount, slaCount>0?"#e53935":G.success, "⚠"],
+          ["Overdue", slaCount, slaCount>0?"#e53935":G.success, "⚠"],
         ].map(([l,v,c,icon])=>(
           <div key={l} style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px",borderLeft:`4px solid ${c}`}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -97,7 +98,7 @@ function Analytics({ mrs }) {
 
         {/* Pie status */}
         <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
-          <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Status Distribution</div>
+          <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Status Summary</div>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="45%" outerRadius={75} dataKey="value" label={({name,value})=>`${value}`} labelLine={false}>
@@ -131,8 +132,70 @@ function Analytics({ mrs }) {
 }
 
 
+
+const STATUS_COLS = [
+  {key:"mr_id",            label:"MR Number"},
+  {key:"vessel",           label:"Vessel"},
+  {key:"department",       label:"Dept"},
+  {key:"job_no",           label:"Job No."},
+  {key:"submitted_by_name",label:"Submitted By"},
+  {key:"total_cost",       label:"Total (AED)"},
+  {key:"status",           label:"Status"},
+  {key:"note",             label:"Current Status / Next Step"},
+];
+
+
+function getStatusNote(status) {
+  switch(status) {
+    case "PENDING":      return { note:"Awaiting Manager approval",       next:"Manager will review and approve or reject" };
+    case "PENDING_HOD":  return { note:"Awaiting HOD/GM approval",        next:"HOD will give final approval (amount >AED 5K)" };
+    case "APPROVED":     return { note:"Approved — with Supply Chain",     next:"SC team will process and arrange items" };
+    case "IN_PROCESS":   return { note:"SC processing — stock pending",    next:"Warehouse will issue once stock is available" };
+    case "ISSUED":       return { note:"Items issued by Warehouse ✓",     next:"Process complete" };
+    case "REJECTED":     return { note:"Rejected — returned to user",      next:"User can edit and resubmit" };
+    default:             return { note:"—", next:"—" };
+  }
+}
+
+function StatusTable({ mrs, allMrs, formFilter, setFormFilter, onOpen, accentColor }) {
+  const { filtered, filters, setFilter, clearFilters, hasFilters } = useTableFilter(mrs, STATUS_COLS);
+  return (
+    <div>
+      <div style={{fontWeight:700,fontSize:18,color:G.navy,marginBottom:16,paddingBottom:12,borderBottom:`2px solid ${accentColor||G.primary}`}}>All MR Status</div>
+      <FormTypeFilter mrs={allMrs} selected={formFilter} onChange={setFormFilter} accentColor={accentColor}/>
+      {mrs.length===0 ? <div style={{color:"#aaa",padding:20}}>No MRs found.</div> : (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <TableFilterHeader columns={STATUS_COLS} rows={mrs} filters={filters} onFilter={setFilter} onClear={clearFilters} hasFilters={hasFilters}/>
+            <tbody>
+              {filtered.map((mr,i)=>(
+                <tr key={mr.mr_id} style={{background:i%2===0?"#fff":G.pale,cursor:"pointer"}} onClick={()=>onOpen(mr)}>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}><strong>{mr.mr_id}</strong></td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.vessel}</td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.department||"—"}</td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.job_no}</td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.submitted_by_name}</td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>
+                    <span style={{background:G.pale,color:G.navy,borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:600}}>{mr.status?.replace(/_/g," ")}</span>
+                  </td>
+                  <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`,maxWidth:220}}>
+                    <div style={{fontSize:11,fontWeight:600,color:G.navy}}>{getStatusNote(mr.status).note}</div>
+                    <div style={{fontSize:10,color:G.muted,marginTop:2}}>↳ {getStatusNote(mr.status).next}</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{fontSize:11,color:G.muted,marginTop:8}}>Showing {filtered.length} of {mrs.length} MRs</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ManagerPortal({ session, onLogout }) {
-  const [view, setView]             = useState("queue");
+  const [view, setView]             = useState("analytics");
   const [mrs, setMrs]               = useState([]);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState(null);
@@ -266,38 +329,8 @@ export default function ManagerPortal({ session, onLogout }) {
 
           {/* All MR Status */}
           {view==="status" && (
-            <div>
-              <div style={s.pageTitle}>All MR Status</div>
-              <FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor={G.navy}/>
-              {filteredMRs.length===0 ? <div style={{color:"#aaa"}}>No MRs found.</div> : (
-                <table style={s.table}>
-                  <thead>
-                    <tr>{["MR Number","Vessel","Dept","Job No.","Submitted By","Total (AED)","Status"].map(h=>(
-                      <th key={h} style={s.th}>{h}</th>
-                    ))}</tr>
-                  </thead>
-                  <tbody>
-                    {filteredMRs.map((mr,i)=>(
-                      <tr key={mr.mr_id}
-                        style={{...i%2===0?s.trEven:s.trOdd, cursor:"pointer"}}
-                        onClick={()=>{openMR(mr);setView("queue");}}>
-                        <td style={s.td}><strong>{mr.mr_id}</strong></td>
-                        <td style={s.td}>{mr.vessel}</td>
-                        <td style={s.td}>{mr.department||"—"}</td>
-                        <td style={s.td}>{mr.job_no}</td>
-                        <td style={s.td}>{mr.submitted_by_name}</td>
-                        <td style={s.td}>{parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
-                        <td style={s.td}>
-                          <span style={{...s.pill,...statusBadgeStyle(mr.status)}}>
-                            {mr.status?.replace("_"," ")}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+            <StatusTable mrs={filteredMRs} allMrs={mrs} formFilter={formFilter} setFormFilter={setFormFilter}
+              onOpen={mr=>{openMR(mr);setView("queue");}} accentColor={G.navy}/>
           )}
 
           {/* Submit new MR */}
@@ -491,7 +524,7 @@ const s = {
   pendingNote:  { fontSize:11, color:"rgba(255,255,255,0.5)" },
   refreshBtn:   { background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
   logoutBtn:    { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.15)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
-  topBar:        { display:"flex", alignItems:"center", gap:10, marginBottom:20, background:"#fff", borderRadius:8, padding:"10px 16px", boxShadow:`0 1px 4px rgba(0,0,0,0.08)`, border:`1px solid ${G.paleBorder}` },
+  topBar:        { display:"flex", alignItems:"center", gap:10, marginBottom:20, padding:"4px 0", justifyContent:"space-between" },
   main:         { flex:1, padding:"28px 32px", overflowY:"auto" },
   pageTitle:    { fontWeight:700, fontSize:18, color:G.navy, marginBottom:20, paddingBottom:12, borderBottom:`2px solid ${G.primary}` },
   emptyState:   { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60vh" },

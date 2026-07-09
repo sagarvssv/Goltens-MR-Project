@@ -41,6 +41,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
   const [submitted, setSubmitted]   = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [dupWarning, setDupWarning]   = useState(null);
+  const [resubmitMrId, setResubmitMrId] = useState(null);
   const [errors, setErrors]         = useState({});
   const [myMRs, setMyMRs]           = useState([]);
   const [loadingMRs, setLoadingMRs] = useState(false);
@@ -92,6 +93,27 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
     setLoadingMRs(false);
   };
 
+  const handleEditMR = (mr) => {
+    // Pre-fill form fields from existing MR
+    setVessel(mr.vessel || "");
+    setDepartment(mr.department || "");
+    setJobNo(mr.job_no || "");
+    setDateRequired(mr.date_required || "");
+    setPurpose(mr.purpose || "");
+    setItems((mr.items||[]).map(it => ({...it, id: Date.now()+Math.random()})));
+    setMrNo(mr.mr_id);
+    setView("form");
+    window.scrollTo(0,0);
+  };
+
+  const handleResubmit = async (mr) => {
+    // Pre-fill form fields for editing
+    handleEditMR(mr);
+    // Store the original MR id so submit knows it's a resubmit
+    setMrNo(mr.mr_id);
+    setResubmitMrId(mr.mr_id);
+  };
+
   const handleSubmit = async () => {
     if (!validate()) return;
 
@@ -112,9 +134,13 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
     setDupWarning(null);
     setSubmitting(true); setSubmitError("");
     try {
-      const reserved = await call("reserve_mr_id", {});
-      const rid = reserved?.mr_id;
-      if (!rid) throw new Error("Could not reserve MR ID");
+      // If resubmitting a rejected MR, use its existing ID
+      let rid = resubmitMrId;
+      if (!rid) {
+        const reserved = await callApi("reserve_mr_id", {});
+        rid = reserved?.mr_id;
+        if (!rid) throw new Error("Could not reserve MR ID");
+      }
       setMrNo(rid);
 
       // Upload documents
@@ -136,6 +162,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
       });
 
       if (result?.success === false) { setSubmitError(result.error || "Submission failed."); setSubmitting(false); return; }
+      setResubmitMrId(null);
       setSubmitted(true);
     } catch (err) { setSubmitError("Could not connect to the server. Please try again."); console.error(err); }
     setSubmitting(false);
@@ -223,7 +250,15 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
 
                     {/* Status messages */}
                     {mr.status === "PENDING" && (
-                      <div style={s.statusNote}>📋 Your MR is awaiting Manager review.</div>
+                      <div style={s.statusNote}>
+                        📋 Your MR is awaiting Manager review.
+                        <div style={{marginTop:8}}>
+                          <button style={{background:G.pale,color:G.navy,border:`1px solid ${G.paleBorder}`,borderRadius:5,padding:"5px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}
+                            onClick={()=>handleEditMR(mr)}>
+                            ✏ Edit MR
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {mr.status === "PENDING_HOD" && (
                       <div style={s.statusNoteHOD}>🔺 Manager approved. Awaiting GM/HOD second-level approval.</div>
@@ -232,7 +267,15 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
                       <div style={s.statusNoteOk}>✓ Approved by {mr.hod_approved_by || mr.approved_by || "manager"}. Sent to Supply Chain.</div>
                     )}
                     {mr.status === "REJECTED" && (
-                      <div style={s.statusNoteErr}>✕ Rejected by {mr.rejected_by}. Reason: {mr.rejection_reason}</div>
+                      <div style={s.statusNoteErr}>
+                        ✕ Rejected by {mr.rejected_by}. Reason: {mr.rejection_reason}
+                        <div style={{marginTop:10}}>
+                          <button style={{background:G.primary,color:"#fff",border:"none",borderRadius:5,padding:"6px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}
+                            onClick={()=>handleResubmit(mr)}>
+                            ↩ Edit & Resubmit
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {mr.status === "IN_PROCESS" && (
                       <div style={s.statusNoteWarn}>⏳ In Process — {mr.inprocess_note}</div>

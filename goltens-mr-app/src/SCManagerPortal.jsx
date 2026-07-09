@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, FunnelChart, Funnel, LabelList,
 } from "recharts";
+import TableFilterHeader, { useTableFilter } from "./TableFilter";
 
 const SC_TEAM = [
   { name: "Nithya Prabhakar",  email: "nithya.prabhakar@goltens.com", id: "SC-01" },
@@ -45,15 +46,16 @@ function KPICard({ label, value, sub, color, icon }) {
 }
 
 function SCMAnalytics({ mrs }) {
+  const [teamFilter, setTeamFilter] = useState("all");
   // Team performance
   const teamStats = SC_TEAM.map(member => {
     const assigned = mrs.filter(m => m.assigned_to === member.email);
     const issued   = assigned.filter(m => m.status === "ISSUED").length;
     const pending  = assigned.filter(m => m.status === "APPROVED").length;
     const inProcess = assigned.filter(m => m.status === "IN_PROCESS").length;
-    const slaBreaches = assigned.filter(m => getSLADays(m) !== null).length;
+    const overdueBreaches = assigned.filter(m => getSLADays(m) !== null).length;
     const totalValue  = assigned.reduce((s,m) => s + parseFloat(m.total_cost||0), 0);
-    return { ...member, total: assigned.length, issued, pending, inProcess, slaBreaches, totalValue };
+    return { ...member, total: assigned.length, issued, pending, inProcess, overdueBreaches, totalValue };
   });
 
   // Pipeline funnel data
@@ -78,7 +80,7 @@ function SCMAnalytics({ mrs }) {
   const pieData = Object.entries(statusCounts).map(([name, value]) => ({ name: name.replace(/_/g," "), value }));
 
   const totalSpend = mrs.reduce((s,m) => s+parseFloat(m.total_cost||0), 0);
-  const slaCount   = mrs.filter(m => getSLADays(m) !== null).length;
+  const overdueCount   = mrs.filter(m => getSLADays(m) !== null).length;
 
   return (
     <div>
@@ -86,14 +88,14 @@ function SCMAnalytics({ mrs }) {
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:28 }}>
         <KPICard label="Total SC MRs"      value={mrs.length}   color="#0d6b4e" icon="📋" />
         <KPICard label="Pending Issuance"  value={mrs.filter(m=>m.status==="APPROVED").length} color="#b8860b" icon="⏳" />
-        <KPICard label="SLA Breaches"      value={slaCount}     color={slaCount>0?"#e53935":G.success} icon="⚠" sub={slaCount>0?"Needs attention":"All on track"} />
+        <KPICard label="Overdue"      value={overdueCount}     color={overdueCount>0?"#e53935":G.success} icon="⚠" sub={overdueCount>0?"Needs attention":"All on track"} />
         <KPICard label="Total Value"       value={`AED ${(totalSpend/1000).toFixed(0)}K`} color={G.primary} icon="💰" />
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:28 }}>
         {/* Pipeline Funnel */}
         <div style={chart.card}>
-          <div style={chart.title}>SC Processing Pipeline</div>
+          <div style={chart.title}>SC Summary</div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={funnelData} layout="vertical" margin={{left:20,right:30}}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
@@ -109,7 +111,7 @@ function SCMAnalytics({ mrs }) {
 
         {/* Status Pie */}
         <div style={chart.card}>
-          <div style={chart.title}>MR Status Distribution</div>
+          <div style={chart.title}>MR Status Summary</div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
@@ -138,32 +140,143 @@ function SCMAnalytics({ mrs }) {
         </ResponsiveContainer>
       </div>
 
-      {/* Team Performance */}
+      {/* Team Performance with filter */}
       <div style={chart.card}>
-        <div style={chart.title}>Team Performance</div>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-          <thead>
-            <tr>{["Team Member","ID","Assigned","Issued","In Process","Pending","SLA Breaches","Total Value"].map(h=>(
-              <th key={h} style={{ background:"#0d6b4e", color:"#fff", padding:"8px 12px", textAlign:"left", fontSize:11, fontWeight:600 }}>{h}</th>
-            ))}</tr>
-          </thead>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div style={chart.title}>Team Performance</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <label style={{fontSize:12,fontWeight:600,color:"#0d6b4e"}}>Filter:</label>
+            <select style={{border:"1px solid #b2dfdb",borderRadius:5,padding:"6px 12px",fontSize:12,outline:"none",color:"#0d6b4e",fontWeight:600,background:"#fff",minWidth:200}}
+              value={teamFilter} onChange={e=>setTeamFilter(e.target.value)}>
+              <option value="all">All Team Members</option>
+              {SC_TEAM.map(m=><option key={m.email} value={m.email}>{m.name} ({m.id})</option>)}
+            </select>
+            {teamFilter!=="all" && <button style={{background:"#f0faf6",border:"1px solid #b2dfdb",borderRadius:4,padding:"5px 10px",fontSize:11,cursor:"pointer",color:"#0d6b4e"}} onClick={()=>setTeamFilter("all")}>✕ Clear</button>}
+          </div>
+        </div>
+
+        {teamFilter !== "all" ? (() => {
+          const memberMRs = mrs.filter(m=>m.assigned_to===teamFilter);
+          const mIssued = memberMRs.filter(m=>m.status==="ISSUED").length;
+          const mPending = memberMRs.filter(m=>m.status==="APPROVED").length;
+          const mInProcess = memberMRs.filter(m=>m.status==="IN_PROCESS").length;
+          const mOverdue = memberMRs.filter(m=>getSLADays(m)!==null).length;
+          const mTotal = memberMRs.reduce((s,m)=>s+parseFloat(m.total_cost||0),0);
+          return (
+            <div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
+                {[["Assigned",memberMRs.length,"#0d6b4e"],["Issued",mIssued,G.success],["In Process",mInProcess,G.primary],["Pending",mPending,"#b8860b"],["Overdue",mOverdue,mOverdue>0?"#e53935":G.success]].map(([l,v,c])=>(
+                  <div key={l} style={{background:"#f0faf6",border:"1px solid #b2dfdb",borderRadius:8,padding:"12px",textAlign:"center"}}>
+                    <div style={{fontSize:22,fontWeight:800,color:c}}>{v}</div>
+                    <div style={{fontSize:10,color:"#0d6b4e",fontWeight:600,textTransform:"uppercase",marginTop:3}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:12,fontWeight:700,color:"#0d6b4e",marginBottom:10}}>
+                Total Value: AED {mTotal.toLocaleString("en-AE",{minimumFractionDigits:2})}
+              </div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead><tr>{["MR Number","Vessel","Job No.","Status","Total (AED)","Overdue"].map(h=>(
+                  <th key={h} style={{background:"#0d6b4e",color:"#fff",padding:"6px 10px",textAlign:"left",fontSize:10,fontWeight:600}}>{h}</th>
+                ))}</tr></thead>
+                <tbody>{memberMRs.map((mr,i)=>{
+                  const od=getSLADays(mr);
+                  return (
+                    <tr key={mr.mr_id} style={{background:i%2===0?"#fff":"#f0faf6"}}>
+                      <td style={{padding:"5px 10px",borderBottom:"1px solid #e0f2f1",fontWeight:600}}>{mr.mr_id}</td>
+                      <td style={{padding:"5px 10px",borderBottom:"1px solid #e0f2f1"}}>{mr.vessel}</td>
+                      <td style={{padding:"5px 10px",borderBottom:"1px solid #e0f2f1"}}>{mr.job_no}</td>
+                      <td style={{padding:"5px 10px",borderBottom:"1px solid #e0f2f1"}}><span style={{background:"#e0f2f1",color:"#0d6b4e",borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:600}}>{mr.status?.replace(/_/g," ")}</span></td>
+                      <td style={{padding:"5px 10px",borderBottom:"1px solid #e0f2f1"}}>AED {parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:0})}</td>
+                      <td style={{padding:"5px 10px",borderBottom:"1px solid #e0f2f1",color:od?"#e53935":G.success,fontWeight:600}}>{od?`⚠ ${od.days}d`:"✓"}</td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            </div>
+          );
+        })() : (
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr>{["Team Member","ID","Assigned","Issued","In Process","Pending","Overdue","Total Value"].map(h=>(
+                <th key={h} style={{ background:"#0d6b4e", color:"#fff", padding:"8px 12px", textAlign:"left", fontSize:11, fontWeight:600 }}>{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {teamStats.map((m,i) => (
+                <tr key={m.email} style={{ background:i%2===0?"#fff":"#f0faf6", cursor:"pointer" }} onClick={()=>setTeamFilter(m.email)}>
+                  <td style={{...chart.td,color:"#0d6b4e",fontWeight:700}}>{m.name} ↗</td>
+                  <td style={chart.td}>{m.id}</td>
+                  <td style={chart.td}>{m.total}</td>
+                  <td style={{ ...chart.td, color:G.success, fontWeight:600 }}>{m.issued}</td>
+                  <td style={{ ...chart.td, color:G.warning }}>{m.inProcess}</td>
+                  <td style={{ ...chart.td, color:"#b8860b" }}>{m.pending}</td>
+                  <td style={{ ...chart.td, color:m.slaBreaches>0?"#e53935":G.success, fontWeight:600 }}>{m.slaBreaches>0?`⚠ ${m.slaBreaches}`:"✓ 0"}</td>
+                  <td style={{ ...chart.td, fontWeight:600 }}>AED {m.totalValue.toLocaleString("en-AE",{minimumFractionDigits:0})}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+
+function getStatusNote(status) {
+  switch(status) {
+    case "PENDING":      return { note:"Awaiting Manager approval",    next:"Manager will review and approve or reject" };
+    case "PENDING_HOD":  return { note:"Awaiting HOD/GM approval",     next:"HOD will give final approval (amount >AED 5K)" };
+    case "APPROVED":     return { note:"Approved — with Supply Chain",  next:"SC team will process and arrange items" };
+    case "IN_PROCESS":   return { note:"SC processing — stock pending", next:"Warehouse will issue once stock is available" };
+    case "ISSUED":       return { note:"Items issued by Warehouse ✓",  next:"Process complete" };
+    case "REJECTED":     return { note:"Rejected — returned to user",   next:"User can edit and resubmit" };
+    default:             return { note:"—", next:"—" };
+  }
+}
+
+function SCAllStatus({ mrs, onOpen }) {
+  const cols = [
+    {key:"mr_id",       label:"MR Number"},
+    {key:"vessel",      label:"Vessel"},
+    {key:"department",  label:"Dept"},
+    {key:"job_no",      label:"Job No."},
+    {key:"assigned_to", label:"Assigned To"},
+    {key:"total_cost",  label:"Total (AED)"},
+    {key:"status",      label:"Status"},
+    {key:"note",        label:"Current Status / Next Step"},
+  ];
+  const rows = mrs.map(mr=>({...mr, assigned_to: SC_TEAM.find(m=>m.email===mr.assigned_to)?.name||mr.assigned_to||"—"}));
+  const { filtered, filters, setFilter, clearFilters, hasFilters } = useTableFilter(rows, cols);
+  return (
+    <div>
+      <div style={{fontWeight:700,fontSize:18,color:"#0d6b4e",marginBottom:16,paddingBottom:12,borderBottom:"2px solid #0d6b4e"}}>All MR Status</div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <TableFilterHeader columns={cols} rows={rows} filters={filters} onFilter={setFilter} onClear={clearFilters} hasFilters={hasFilters}/>
           <tbody>
-            {teamStats.map((m,i) => (
-              <tr key={m.email} style={{ background: i%2===0?"#fff":"#f0faf6" }}>
-                <td style={chart.td}><strong>{m.name}</strong></td>
-                <td style={chart.td}>{m.id}</td>
-                <td style={chart.td}>{m.total}</td>
-                <td style={{ ...chart.td, color:G.success, fontWeight:600 }}>{m.issued}</td>
-                <td style={{ ...chart.td, color:G.warning }}>{m.inProcess}</td>
-                <td style={{ ...chart.td, color:"#b8860b" }}>{m.pending}</td>
-                <td style={{ ...chart.td, color: m.slaBreaches>0?"#e53935":G.success, fontWeight:600 }}>
-                  {m.slaBreaches > 0 ? `⚠ ${m.slaBreaches}` : "✓ 0"}
+            {filtered.map((mr,i)=>(
+              <tr key={mr.mr_id} style={{background:i%2===0?"#fff":"#f0faf6",cursor:"pointer"}} onClick={()=>onOpen(mr)}>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}><strong>{mr.mr_id}</strong></td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.vessel}</td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.department||"—"}</td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.job_no}</td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{mr.assigned_to}</td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>{parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`}}>
+                  <span style={{background:"#e0f2f1",color:"#0d6b4e",borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:600}}>{mr.status?.replace(/_/g," ")}</span>
                 </td>
-                <td style={{ ...chart.td, fontWeight:600 }}>AED {m.totalValue.toLocaleString("en-AE",{minimumFractionDigits:0})}</td>
+                <td style={{padding:"7px 10px",borderBottom:`1px solid ${G.paleBorder}`,maxWidth:220}}>
+                  <div style={{fontSize:11,fontWeight:600,color:G.navy}}>{getStatusNote(mr.status).note}</div>
+                  <div style={{fontSize:10,color:G.muted,marginTop:2}}>↳ {getStatusNote(mr.status).next}</div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div style={{fontSize:11,color:G.muted,marginTop:8}}>Showing {filtered.length} of {mrs.length} MRs</div>
       </div>
     </div>
   );
@@ -191,7 +304,7 @@ export default function SCManagerPortal({ session, onLogout }) {
   useEffect(() => { loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); }, []);
 
   const filteredMRs = filterByFormType(mrs, formFilter);
-  const slaBreached = filteredMRs.filter(m => getSLADays(m) !== null);
+  const overdueBreached = filteredMRs.filter(m => getSLADays(m) !== null);
 
   const handleReassign = async () => {
     if (!reassignTarget || !selected) return;
@@ -237,7 +350,7 @@ export default function SCManagerPortal({ session, onLogout }) {
             {key:"dashboard",  label:"🏠 Dashboard"},
             {key:"queue",      label:"📋 MR Queue"},
             {key:"analytics",  label:"📊 Analytics"},
-            {key:"sla",        label:`⚠ SLA Alerts ${slaBreached.length>0?`(${slaBreached.length})`:""}` },
+            {key:"overdue",        label:`⚠ Overdue Alerts ${overdueBreached.length>0?`(${overdueBreached.length})`:""}` },
             {key:"allstatus",  label:"🔍 All MR Status"},
           ].map(({key,label}) => (
             <div key={key} style={{...s.navItem,...(view===key?s.navItemActive:{})}} onClick={()=>{setView(key);setSelected(null);}}>
@@ -250,7 +363,7 @@ export default function SCManagerPortal({ session, onLogout }) {
           {filteredMRs.filter(m=>m.status==="APPROVED").slice(0,5).map(mr => (
             <div key={mr.mr_id} style={{...s.mrCard,...(selected?.mr_id===mr.mr_id?s.mrCardActive:{})}}
               onClick={()=>{setSelected(mr);setView("queue");setActionMsg("");}}>
-              <div style={s.mrCardId}>{mr.mr_id} {getSLADays(mr)&&<span style={s.slaDot}>⚠</span>}</div>
+              <div style={s.mrCardId}>{mr.mr_id} {getSLADays(mr)&&<span style={s.overdueDot}>⚠</span>}</div>
               <div style={s.mrCardMeta}>{mr.vessel} · {mr.submitted_by_name}</div>
             </div>
           ))}
@@ -260,10 +373,12 @@ export default function SCManagerPortal({ session, onLogout }) {
 
         {/* Main */}
         <div style={s.main}>
-          {/* Top bar */}
           <div style={s.topBar}>
             <SearchBar mrs={filteredMRs} onSelect={mr=>{setSelected(mr);setView("queue");}} />
-            <NotificationBell mrs={mrs} role="sc_manager" userEmail={session.email} accentColor="#0d6b4e"/>
+            <div style={{marginLeft:"auto"}}>
+              <NotificationBell mrs={mrs} role="sc_manager" userEmail={session.email} accentColor="#0d6b4e"
+                onNavigate={mr=>{setSelected(mr);setView("queue");}}/>
+            </div>
           </div>
 
           {/* Dashboard */}
@@ -274,11 +389,11 @@ export default function SCManagerPortal({ session, onLogout }) {
                 <KPICard label="Pending Issuance" value={pendingCount}   color="#b8860b" icon="⏳"/>
                 <KPICard label="In Process"       value={inProcessCount} color={G.primary} icon="🔄"/>
                 <KPICard label="Issued"           value={issuedCount}    color={G.success} icon="✅"/>
-                <KPICard label="SLA Breaches"     value={slaBreached.length} color={slaBreached.length>0?"#e53935":G.success} icon="⚠"/>
+                <KPICard label="Overdue"     value={overdueBreached.length} color={overdueBreached.length>0?"#e53935":G.success} icon="⚠"/>
               </div>
               <div style={s.sectionTitle}>Recent Activity</div>
               <table style={s.table}>
-                <thead><tr>{["MR Number","Vessel","Job No.","Status","Assigned To","SLA"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+                <thead><tr>{["MR Number","Vessel","Job No.","Status","Assigned To","Overdue"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
                 <tbody>{recentActivity.map((mr,i)=>(
                   <tr key={mr.mr_id} style={{...i%2===0?s.trEven:s.trOdd,cursor:"pointer"}} onClick={()=>{setSelected(mr);setView("queue");}}>
                     <td style={s.td}><strong>{mr.mr_id}</strong></td>
@@ -335,28 +450,28 @@ export default function SCManagerPortal({ session, onLogout }) {
             </div>
           )}
 
-          {/* SLA Alerts */}
-          {view==="sla" && (
+          {/* Overdue Alerts */}
+          {view==="overdue" && (
             <div>
-              <div style={s.pageTitle}>SLA Breach Alerts</div>
-              {slaBreached.length===0 ? (
+              <div style={s.pageTitle}>Overdue Alerts</div>
+              {overdueBreached.length===0 ? (
                 <div style={{textAlign:"center",padding:"60px 20px",color:G.success}}>
                   <div style={{fontSize:48,marginBottom:12}}>✅</div>
-                  <div style={{fontSize:16,fontWeight:600}}>All MRs are within SLA thresholds</div>
+                  <div style={{fontSize:16,fontWeight:600}}>All MRs are within Overdue thresholds</div>
                 </div>
               ) : (
                 <table style={s.table}>
                   <thead><tr>{["MR Number","Vessel","Job No.","Status","Days Pending","Over By","Assigned To"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
-                  <tbody>{slaBreached.map((mr,i)=>{
-                    const sla=getSLADays(mr);
+                  <tbody>{overdueBreached.map((mr,i)=>{
+                    const overdue=getSLADays(mr);
                     return (
                       <tr key={mr.mr_id} style={{...i%2===0?s.trEven:s.trOdd,cursor:"pointer"}} onClick={()=>{setSelected(mr);setView("queue");}}>
                         <td style={s.td}><strong>{mr.mr_id}</strong></td>
                         <td style={s.td}>{mr.vessel}</td>
                         <td style={s.td}>{mr.job_no}</td>
                         <td style={s.td}><span style={{background:"#fff5f5",color:G.danger,borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:700}}>{mr.status?.replace(/_/g," ")}</span></td>
-                        <td style={{...s.td,fontWeight:700,color:"#e53935"}}>{sla.days} days</td>
-                        <td style={{...s.td,fontWeight:700,color:"#c0392b"}}>+{sla.overBy} days</td>
+                        <td style={{...s.td,fontWeight:700,color:"#e53935"}}>{overdue.days} days</td>
+                        <td style={{...s.td,fontWeight:700,color:"#c0392b"}}>+{overdue.overBy} days</td>
                         <td style={s.td}>{SC_TEAM.find(m=>m.email===mr.assigned_to)?.name||mr.assigned_to||"—"}</td>
                       </tr>
                     );
@@ -368,24 +483,7 @@ export default function SCManagerPortal({ session, onLogout }) {
 
           {/* All Status */}
           {view==="allstatus" && (
-            <div>
-              <div style={s.pageTitle}>All MR Status</div>
-              <table style={s.table}>
-                <thead><tr>{["MR Number","Vessel","Dept","Job No.","Assigned To","Total (AED)","Status","SLA"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
-                <tbody>{filteredMRs.map((mr,i)=>(
-                  <tr key={mr.mr_id} style={{...i%2===0?s.trEven:s.trOdd,cursor:"pointer"}} onClick={()=>{setSelected(mr);setView("queue");}}>
-                    <td style={s.td}><strong>{mr.mr_id}</strong></td>
-                    <td style={s.td}>{mr.vessel}</td>
-                    <td style={s.td}>{mr.department||"—"}</td>
-                    <td style={s.td}>{mr.job_no}</td>
-                    <td style={s.td}>{SC_TEAM.find(m=>m.email===mr.assigned_to)?.name||mr.assigned_to||"—"}</td>
-                    <td style={s.td}>{parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}</td>
-                    <td style={s.td}><span style={{background:G.pale,color:G.navy,borderRadius:8,padding:"2px 8px",fontSize:11,fontWeight:600}}>{mr.status?.replace(/_/g," ")}</span></td>
-                    <td style={s.td}>{getSLADays(mr)?<span style={{color:"#e53935",fontWeight:700}}>⚠ {getSLADays(mr).days}d</span>:"✓"}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
+            <SCAllStatus mrs={filteredMRs} onOpen={mr=>{setSelected(mr);setView("queue");}}/>
           )}
         </div>
       </div>
@@ -417,12 +515,12 @@ const s = {
   mrCardActive:{ background:"rgba(255,255,255,0.15)" },
   mrCardId:    { fontWeight:700, fontSize:12, color:"#fff" },
   mrCardMeta:  { fontSize:10, color:"rgba(255,255,255,0.65)", marginTop:2 },
-  slaDot:      { color:"#ffcdd2", fontSize:10 },
+  overdueDot:      { color:"#ffcdd2", fontSize:10 },
   sideFooter:  { marginTop:"auto", padding:"16px 20px 0", borderTop:"1px solid rgba(255,255,255,0.1)", display:"flex", flexDirection:"column", gap:8 },
   refreshBtn:  { background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
   logoutBtn:   { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.15)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
   main:        { flex:1, padding:"20px 28px", overflowY:"auto" },
-  topBar:      { display:"flex", alignItems:"center", gap:10, marginBottom:20, background:"#0d6b4e", borderRadius:8, padding:"8px 14px" },
+  topBar:      { display:"flex", alignItems:"center", gap:10, marginBottom:20, padding:"4px 0" },
   pageTitle:   { fontWeight:700, fontSize:18, color:"#0d6b4e", marginBottom:20, paddingBottom:12, borderBottom:`2px solid #0d6b4e` },
   sectionTitle:{ fontWeight:700, fontSize:13, color:"#333", marginBottom:12, textTransform:"uppercase" },
   emptyState:  { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60vh" },

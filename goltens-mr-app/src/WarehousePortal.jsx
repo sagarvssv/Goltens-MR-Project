@@ -3,6 +3,8 @@ import { listMRs } from "./api";
 import MRDetailView from "./MRDetailView";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
+import SearchBar from "./SearchBar";
+import NotificationBell from "./NotificationBell";
 import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import HelpChatbot from "./HelpChatbot";
 import { downloadMRWithDocs } from "./downloadPDF";
@@ -45,6 +47,13 @@ export default function WarehousePortal({ session, onLogout }) {
     const t = setInterval(loadMRs, 120000);
     return () => clearInterval(t);
   }, []);
+
+  // Auto-select first MR when data loads
+  useEffect(() => {
+    if (mrs.length > 0 && !selected) {
+      openMR(mrs[0]);
+    }
+  }, [mrs]);
 
   const filteredMRs = filterByFormType(mrs, formFilter);
 
@@ -128,6 +137,11 @@ export default function WarehousePortal({ session, onLogout }) {
 
         {/* Main */}
         <div style={s.main}>
+          <div style={s.topBar}>
+            <SearchBar mrs={mrs} onSelect={mr=>openMR(mr)} placeholder="Search MR, vessel, job…"/>
+            <NotificationBell mrs={mrs} role="warehouse" userEmail={session.email} accentColor="#5d4037"
+              onNavigate={mr=>openMR(mr)}/>
+          </div>
           {!selected ? (
             <div style={s.emptyState}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🏭</div>
@@ -242,6 +256,7 @@ const s = {
   pendingNote:     { fontSize:11, color:"rgba(255,255,255,0.5)" },
   refreshBtn:      { background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
   logoutBtn:       { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.15)", color:"#fff", borderRadius:4, padding:"6px 14px", fontSize:12, cursor:"pointer" },
+  topBar:          { display:"flex", alignItems:"center", gap:10, marginBottom:20, padding:"4px 0", justifyContent:"space-between" },
   main:            { flex:1, padding:"28px 32px", overflowY:"auto" },
   emptyState:      { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"60vh" },
   issuePanel:      { background:"#fafbfc", border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"20px 24px", marginTop:16 },

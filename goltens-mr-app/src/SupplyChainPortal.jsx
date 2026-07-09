@@ -42,7 +42,7 @@ export default function SupplyChainPortal({ session, onLogout }) {
   useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); },[]);
 
   const [formFilter, setFormFilter] = useState("all");
-  const [scPortalView, setScPortalView] = useState("queue"); // queue | analytics
+  const [scPortalView, setScPortalView] = useState("analytics"); // queue | analytics
   const filteredMRs = filterByFormType(mrs, formFilter);
   const openMR = (mr) => {
     setSelected(mr); setActionMsg("");
@@ -124,7 +124,10 @@ export default function SupplyChainPortal({ session, onLogout }) {
         <div style={s.main}>
           <div style={s.topBar}>
             <SearchBar mrs={mrs} onSelect={mr=>{openMR(mr);setScPortalView("queue");}} />
-            <NotificationBell mrs={mrs} role="supply_chain" userEmail={session.email} accentColor="#0d6b4e"/>
+            <div style={{marginLeft:"auto"}}>
+              <NotificationBell mrs={mrs} role="supply_chain" userEmail={session.email} accentColor="#0d6b4e"
+                onNavigate={mr=>{openMR(mr);setScPortalView("queue");}}/>
+            </div>
           </div>
           {scPortalView==="analytics" && (
             <div>
@@ -203,7 +206,7 @@ const s = {
   pendingNote:{fontSize:11,color:"rgba(255,255,255,0.5)"},
   refreshBtn:{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
   logoutBtn:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",color:"#fff",borderRadius:4,padding:"6px 14px",fontSize:12,cursor:"pointer"},
-  topBar:{display:"flex",alignItems:"center",gap:10,marginBottom:16,background:"#fff",borderRadius:8,padding:"10px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",border:"1px solid #B8D4E8"},
+  topBar:{display:"flex",alignItems:"center",gap:10,marginBottom:16,padding:"4px 0"},
   main:{flex:1,padding:"28px 32px",overflowY:"auto"},
   emptyState:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh"},
   actionPanel:{background:"#fafbfc",border:`1px solid ${G.paleBorder}`,borderRadius:8,padding:"20px 24px",marginTop:16},
@@ -293,7 +296,7 @@ function SCAnalytics({ mrs }) {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
         {/* Pie */}
         <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
-          <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:14}}>Processing Stage Split</div>
+          <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:14}}>Stage Summary</div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${value}`} labelLine>

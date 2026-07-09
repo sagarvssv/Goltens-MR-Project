@@ -795,6 +795,76 @@ async def invoke(req: Request):
 
             return {"success": True, "assigned_to": new_assignee}
 
+
+        # ── Resubmit rejected MR ──────────────────────────────────────────────
+        elif action == "resubmit_mr":
+            table = dynamodb.Table(MR_TABLE)
+            item  = table.get_item(Key={"mr_id": data["mr_id"]}).get("Item")
+            if not item: return {"error": "MR not found"}
+
+            item_list  = data.get("items", item.get("items", []))
+            doc_keys   = data.get("document_s3_keys", item.get("document_s3_keys", []))
+            total_cost = sum(float(i.get("estimated_cost", 0)) * int(i.get("qty", 0)) for i in item_list)
+            needs_hod  = total_cost > APPROVAL_SLAB
+            itxt       = items_text(item_list)
+
+            table.update_item(
+                Key={"mr_id": data["mr_id"]},
+                UpdateExpression="SET #s=:s, vessel=:v, department=:d, job_no=:j, date_required=:dr, purpose=:p, items=:i, document_s3_keys=:dk, total_cost=:tc, needs_hod_approval=:nh, rejected_by=:rb, rejection_reason=:rr, updated_at=:ua",
+                ExpressionAttributeNames={"#s": "status"},
+                ExpressionAttributeValues={
+                    ":s":  "PENDING",
+                    ":v":  data.get("vessel", item.get("vessel", "")),
+                    ":d":  data.get("department", item.get("department", "")),
+                    ":j":  data.get("job_no", item.get("job_no", "")),
+                    ":dr": data.get("date_required", item.get("date_required", "")),
+                    ":p":  data.get("purpose", item.get("purpose", "")),
+                    ":i":  item_list,
+                    ":dk": doc_keys,
+                    ":tc": str(round(total_cost, 2)),
+                    ":nh": needs_hod,
+                    ":rb": "",
+                    ":rr": "",
+                    ":ua": now()
+                })
+
+            # Notify USER - confirmation
+            send_email(
+                item["submitted_by_email"],
+                f"MR Resubmitted — {data['mr_id']}",
+                f"Dear {item['submitted_by_name']},\n\n"
+                f"Your MR {data['mr_id']} has been resubmitted successfully.\n\n"
+                f"Items:\n{itxt}\n\n"
+                f"Total  : AED {total_cost:,.2f}\n"
+                f"Status : Pending Manager Approval\n\n"
+                f"Log in to track:\n{PORTAL_URL}" + signature("system")
+            )
+
+            # Notify MANAGER
+            send_email(
+                item.get("manager_email", MANAGER_EMAIL),
+                f"MR Resubmitted — Requires Your Review — {data['mr_id']}",
+                f"MR {data['mr_id']} has been resubmitted by {item['submitted_by_name']} after rejection.\n\n"
+                f"Vessel     : {item.get('vessel', '—')}\n"
+                f"Job No.    : {item.get('job_no', '—')}\n"
+                f"Total      : AED {total_cost:,.2f}\n\n"
+                f"Items:\n{itxt}\n\n"
+                f"{'NOTE: Amount exceeds AED ' + str(APPROVAL_SLAB) + '. Will require HOD approval after your review.' if needs_hod else ''}\n\n"
+                f"Log in to review:\n{PORTAL_URL}" + signature("system")
+            )
+
+            # Notify HOD if above slab
+            if needs_hod:
+                send_email(
+                    item.get("hod_email", HOD_EMAIL),
+                    f"MR Resubmitted — FYI — {data['mr_id']}",
+                    f"MR {data['mr_id']} has been resubmitted by {item['submitted_by_name']}.\n"
+                    f"Amount AED {total_cost:,.2f} exceeds AED {APPROVAL_SLAB:,.0f} — will reach you for second-level approval after manager review.\n\n"
+                    f"Log in to view:\n{PORTAL_URL}" + signature("system")
+                )
+
+            return {"success": True, "mr_id": data["mr_id"], "status": "PENDING"}
+
         return {"error": f"Unknown action: {action}"}
 
     except Exception as e:

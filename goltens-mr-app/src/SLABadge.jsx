@@ -53,7 +53,7 @@ export default function SLABadge({ mr, compact = false }) {
     }}>
       <span>⚠</span>
       <span>
-        <strong>SLA Breach:</strong> {mr.status.replace(/_/g," ")} for {sla.days} days
+        <strong>Overdue:</strong> {mr.status.replace(/_/g," ")} for {sla.days} days
         (threshold: {sla.threshold} days, over by {sla.overBy} day{sla.overBy !== 1 ? "s" : ""})
       </span>
     </div>
