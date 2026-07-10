@@ -14,10 +14,19 @@ const today       = () => new Date().toISOString().split("T")[0];
 
 async function call(action, data = {}) {
   const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
-  // Get token from localStorage (set by react-oidc-context)
+  // Get token from react-oidc-context localStorage
   const token = (() => {
-    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
-    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    try {
+      // react-oidc-context stores user as JSON with key pattern oidc.user:...
+      const keys = Object.keys(localStorage).filter(k => k.startsWith("oidc.user:"));
+      for (const k of keys) {
+        const val = localStorage.getItem(k);
+        if (val) {
+          const parsed = JSON.parse(val);
+          if (parsed.id_token) return parsed.id_token;
+        }
+      }
+    } catch(e) {}
     return "";
   })();
   const headers = { "Content-Type": "application/json" };
@@ -150,7 +159,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
       // If resubmitting a rejected MR, use its existing ID
       let rid = resubmitMrId;
       if (!rid) {
-        const reserved = await callApi("reserve_mr_id", {});
+        const reserved = await call("reserve_mr_id", {});
         rid = reserved?.mr_id;
         if (!rid) throw new Error("Could not reserve MR ID");
       }
@@ -166,13 +175,16 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
       }
 
       const validItems = items.filter(it => it.description.trim()).map(({ id, ...rest }) => rest);
-      const result = await submitMR({
+      const submitData = {
         mr_id: rid, vessel, department, job_no: jobNo, date_required: dateRequired,
         submitted_by_name: requestedBy.name, submitted_by_email: session.email,
         submitted_by_id_no: requestedBy.id_no, manager_email: managerEmail,
         hod_email: hodEmail, approval_slab: approvalSlab,
         items: validItems, document_s3_keys: s3Keys, needs_hod_approval: needsHOD, form_type: formType, purpose: purpose,
-      });
+      };
+      const result = resubmitMrId
+        ? await call("resubmit_mr", submitData)
+        : await submitMR(submitData);
 
       if (result?.success === false) { setSubmitError(result.error || "Submission failed."); setSubmitting(false); return; }
       setResubmitMrId(null);

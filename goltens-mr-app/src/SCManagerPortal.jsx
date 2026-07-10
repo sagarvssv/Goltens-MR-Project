@@ -28,8 +28,13 @@ const COLORS = ["#0d6b4e","#1B6CA8","#b8860b","#c0392b","#7b1fa2","#00838f"];
 async function call(action, data={}) {
   const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
   const token = (() => {
-    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
-    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith("oidc.user:"));
+      for (const k of keys) {
+        const parsed = JSON.parse(localStorage.getItem(k) || "{}");
+        if (parsed.id_token) return parsed.id_token;
+      }
+    } catch(e) {}
     return "";
   })();
   const headers = {"Content-Type":"application/json"};

@@ -10,9 +10,24 @@ const ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "/invoke";
 let _idToken = "";
 export function setAuthToken(token) { _idToken = token; }
 
+function getToken() {
+  // Use explicitly set token first
+  if (_idToken) return _idToken;
+  // Fallback: read from react-oidc-context localStorage
+  try {
+    const keys = Object.keys(localStorage).filter(k => k.startsWith("oidc.user:"));
+    for (const k of keys) {
+      const parsed = JSON.parse(localStorage.getItem(k) || "{}");
+      if (parsed.id_token) return parsed.id_token;
+    }
+  } catch(e) {}
+  return "";
+}
+
 async function call(action, data = {}) {
+  const token = getToken();
   const headers = { "Content-Type": "application/json" };
-  if (_idToken) headers["Authorization"] = `Bearer ${_idToken}`;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(ENDPOINT, {
     method:  "POST",
