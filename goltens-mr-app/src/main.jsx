@@ -14,8 +14,8 @@ const cognitoAuthConfig = {
   automaticSilentRenew:   true,
   loadUserInfo:           true,
   onSigninCallback:       () => {
-    // Clean up the URL after Cognito redirects back
-    window.history.replaceState({}, document.title, window.location.pathname);
+    // After successful signin, redirect to home
+    window.location.replace("/");
   },
 };
 
