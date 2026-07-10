@@ -6,12 +6,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/invoke': {
-        target: 'http://localhost:8080',
+        target: 'https://ua3vzm7fnf.execute-api.eu-central-1.amazonaws.com/prod',
         changeOrigin: true,
-      },
-      '/invoke-proxy': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/invoke/, '/invoke'),
       }
     }
   }
