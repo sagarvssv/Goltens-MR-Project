@@ -98,7 +98,7 @@ const md = {
 
 async function askClaude(systemPrompt, messages) {
   // Route through our own backend to avoid CORS — backend calls Anthropic API
-  const res = await fetch("/invoke", {
+  const res = await fetch(import.meta.env.VITE_API_ENDPOINT || "/invoke", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

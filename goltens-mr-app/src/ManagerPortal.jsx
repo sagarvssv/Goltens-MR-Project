@@ -15,10 +15,20 @@ import HelpChatbot from "./HelpChatbot";
 import TableFilterHeader, { useTableFilter } from "./TableFilter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
-async function call(action,data={}){
-  const res=await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
+async function call(action, data={}) {
+  const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
+  const token = (() => {
+    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
+    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    return "";
+  })();
+  const headers = {"Content-Type":"application/json"};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({action,data})});
   if(!res.ok) throw new Error(`${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result && typeof result.body === "string") { try { return JSON.parse(result.body); } catch { return result; } }
+  return result;
 }
 
 const COLORS = ["#1B6CA8","#1a7a4a","#b8860b","#c0392b","#7b1fa2","#00838f","#e65100"];
@@ -98,7 +108,7 @@ function Analytics({ mrs }) {
 
         {/* Pie status */}
         <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
-          <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Status Summary</div>
+          <div style={{fontWeight:700,fontSize:13,color:G.navy,marginBottom:14}}>Status Distribution</div>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="45%" outerRadius={75} dataKey="value" label={({name,value})=>`${value}`} labelLine={false}>

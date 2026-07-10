@@ -13,9 +13,22 @@ const emptyItem   = () => ({ id: Date.now() + Math.random(), item_code: "", desc
 const today       = () => new Date().toISOString().split("T")[0];
 
 async function call(action, data = {}) {
-  const res = await fetch("/invoke", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, data }) });
+  const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
+  // Get token from localStorage (set by react-oidc-context)
+  const token = (() => {
+    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
+    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    return "";
+  })();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ action, data }) });
   if (!res.ok) throw new Error(`API call failed: ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result && typeof result.body === "string") {
+    try { return JSON.parse(result.body); } catch { return result; }
+  }
+  return result;
 }
 
 const statusColor = (st) => {

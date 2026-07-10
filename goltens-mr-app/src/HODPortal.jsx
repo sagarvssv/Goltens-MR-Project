@@ -17,9 +17,19 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 
 async function call(action, data={}) {
-  const res = await fetch("/invoke", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action,data})});
+  const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
+  const token = (() => {
+    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
+    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    return "";
+  })();
+  const headers = {"Content-Type":"application/json"};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({action,data})});
   if(!res.ok) throw new Error(`${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result && typeof result.body === "string") { try { return JSON.parse(result.body); } catch { return result; } }
+  return result;
 }
 
 const COLORS_HOD = ["#4a148c","#1B6CA8","#0d6b4e","#b8860b","#c0392b","#00838f"];
@@ -122,7 +132,7 @@ function Analytics({ mrs }) {
 
         {/* Pie */}
         <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
-          <div style={{fontWeight:700,fontSize:13,color:"#4a148c",marginBottom:14}}>Status Summary</div>
+          <div style={{fontWeight:700,fontSize:13,color:"#4a148c",marginBottom:14}}>Status Split</div>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="45%" innerRadius={40} outerRadius={75} dataKey="value">

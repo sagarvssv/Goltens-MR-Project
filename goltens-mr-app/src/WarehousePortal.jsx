@@ -10,8 +10,19 @@ import HelpChatbot from "./HelpChatbot";
 import { downloadMRWithDocs } from "./downloadPDF";
 
 async function call(action, data={}) {
-  const res = await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
-  if(!res.ok) throw new Error(`${res.status}`); return res.json();
+  const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
+  const token = (() => {
+    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
+    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    return "";
+  })();
+  const headers = {"Content-Type":"application/json"};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({action,data})});
+  if(!res.ok) throw new Error(`${res.status}`);
+  const result = await res.json();
+  if (result && typeof result.body === "string") { try { return JSON.parse(result.body); } catch { return result; } }
+  return result;
 }
 
 export default function WarehousePortal({ session, onLogout }) {

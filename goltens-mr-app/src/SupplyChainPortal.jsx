@@ -12,8 +12,19 @@ import FormTypeFilter, { filterByFormType } from "./FormTypeFilter";
 import HelpChatbot from "./HelpChatbot";
 
 async function call(action, data={}) {
-  const res = await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
-  if(!res.ok) throw new Error(`${res.status}`); return res.json();
+  const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
+  const token = (() => {
+    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
+    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    return "";
+  })();
+  const headers = {"Content-Type":"application/json"};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({action,data})});
+  if(!res.ok) throw new Error(`${res.status}`);
+  const result = await res.json();
+  if (result && typeof result.body === "string") { try { return JSON.parse(result.body); } catch { return result; } }
+  return result;
 }
 
 
@@ -296,7 +307,7 @@ function SCAnalytics({ mrs }) {
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
         {/* Pie */}
         <div style={{background:"#fff",border:`1px solid ${G.paleBorder}`,borderRadius:10,padding:"16px 20px"}}>
-          <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:14}}>Stage Summary</div>
+          <div style={{fontWeight:700,fontSize:13,color:"#0d6b4e",marginBottom:14}}>Processing Stage Split</div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${value}`} labelLine>

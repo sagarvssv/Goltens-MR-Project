@@ -26,8 +26,19 @@ const SC_TEAM = [
 const COLORS = ["#0d6b4e","#1B6CA8","#b8860b","#c0392b","#7b1fa2","#00838f"];
 
 async function call(action, data={}) {
-  const res = await fetch("/invoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,data})});
-  if(!res.ok) throw new Error(`${res.status}`); return res.json();
+  const endpoint = import.meta.env.VITE_API_ENDPOINT || "/invoke";
+  const token = (() => {
+    const keys = Object.keys(localStorage).filter(k => k.includes("idToken") || k.includes("id_token"));
+    for (const k of keys) { const v = localStorage.getItem(k); if (v && v.length > 100) return v; }
+    return "";
+  })();
+  const headers = {"Content-Type":"application/json"};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({action,data})});
+  if(!res.ok) throw new Error(`${res.status}`);
+  const result = await res.json();
+  if (result && typeof result.body === "string") { try { return JSON.parse(result.body); } catch { return result; } }
+  return result;
 }
 
 function KPICard({ label, value, sub, color, icon }) {
@@ -95,7 +106,7 @@ function SCMAnalytics({ mrs }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:28 }}>
         {/* Pipeline Funnel */}
         <div style={chart.card}>
-          <div style={chart.title}>SC Summary</div>
+          <div style={chart.title}>SC Processing Pipeline</div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={funnelData} layout="vertical" margin={{left:20,right:30}}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
@@ -111,7 +122,7 @@ function SCMAnalytics({ mrs }) {
 
         {/* Status Pie */}
         <div style={chart.card}>
-          <div style={chart.title}>MR Status Summary</div>
+          <div style={chart.title}>MR Status Distribution</div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
