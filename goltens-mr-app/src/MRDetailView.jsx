@@ -15,23 +15,8 @@ const isPdf   = n => /\.pdf$/i.test(n || "");
 
 // ── Preview Modal ──────────────────────────────────────────────────────────────
 function PreviewModal({ doc, onClose }) {
-  const [blobUrl, setBlobUrl]   = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
-
-  useEffect(() => {
-    let revoked = false;
-    setLoading(true);
-    setError(null);
-    fetchDocumentBlob(doc.s3_key)
-      .then(url => { if (!revoked) { setBlobUrl(url); setLoading(false); } })
-      .catch(err => { if (!revoked) { setError(err.message); setLoading(false); } });
-    return () => {
-      revoked = true;
-      // Revoke blob URL on unmount to free memory
-      setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-    };
-  }, [doc.s3_key]);
+  const fileName = doc.filename  || doc.file_name || "document";
+  const docUrl   = doc.url       || doc.s3_key    || "";
 
   useEffect(() => {
     const h = e => { if (e.key === "Escape") onClose(); };
@@ -39,11 +24,8 @@ function PreviewModal({ doc, onClose }) {
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
 
-  const handleDownload = () => {
-    if (!blobUrl) return;
-    const a = document.createElement("a");
-    a.href = blobUrl; a.download = doc.file_name;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  const handleOpenNew = () => {
+    if (docUrl) window.open(docUrl, "_blank");
   };
 
   return createPortal(
@@ -52,44 +34,33 @@ function PreviewModal({ doc, onClose }) {
         {/* Header */}
         <div style={dv.modalHeader}>
           <span style={dv.modalTitle}>
-            {isImage(doc.file_name) ? "🖼️" : isPdf(doc.file_name) ? "📄" : "📎"} {doc.file_name}
+            {isImage(fileName) ? "🖼️" : isPdf(fileName) ? "📄" : "📎"} {fileName}
           </span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button style={dv.dlBtn} onClick={handleDownload} disabled={!blobUrl}>⬇ Download</button>
+            <button style={dv.dlBtn} onClick={handleOpenNew}>🔗 Open</button>
             <button style={dv.closeBtn} onClick={onClose}>✕ Close</button>
           </div>
         </div>
 
         {/* Body */}
         <div style={dv.modalBody}>
-          {loading && (
-            <div style={dv.loadingState}>
-              <div style={dv.spinner}/>
-              <div style={{ color: G.muted, marginTop: 12, fontSize: 13 }}>Loading document…</div>
-            </div>
-          )}
-          {error && (
+          {!docUrl ? (
             <div style={dv.errorState}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
-              <div style={{ color: G.danger, marginBottom: 16 }}>Could not load document: {error}</div>
-              <a href={`/invoke-proxy?s3_key=${encodeURIComponent(doc.s3_key)}`}
-                target="_blank" rel="noopener noreferrer" style={dv.openLink}>
-                Try opening directly ↗
-              </a>
+              <div style={{ color: G.danger }}>Document URL not available</div>
             </div>
-          )}
-          {!loading && !error && blobUrl && (
-            isImage(doc.file_name)
-              ? <img src={blobUrl} alt={doc.file_name} style={dv.previewImg} />
-              : isPdf(doc.file_name)
-              ? <iframe src={blobUrl} style={dv.previewFrame} title={doc.file_name} />
-              : (
-                <div style={dv.noPreview}>
-                  <div style={{ fontSize: 64, marginBottom: 16 }}>📎</div>
-                  <div style={{ color: G.muted, marginBottom: 20, fontSize: 13 }}>{doc.file_name}</div>
-                  <button style={dv.dlLinkLg} onClick={handleDownload}>⬇ Download File</button>
-                </div>
-              )
+          ) : isImage(fileName) ? (
+            <img src={docUrl} alt={fileName} style={dv.previewImg} />
+          ) : isPdf(fileName) ? (
+            <iframe src={docUrl} style={dv.previewFrame} title={fileName} />
+          ) : (
+            <div style={dv.noPreview}>
+              <div style={{ fontSize: 64, marginBottom: 16 }}>📎</div>
+              <div style={{ color: G.navy, fontWeight: 600, marginBottom: 8, fontSize: 14 }}>{fileName}</div>
+              <button style={{ ...dv.dlLinkLg, marginBottom: 12 }} onClick={handleOpenNew}>
+                🔗 Open Document
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -109,7 +80,7 @@ function DocSection({ mrId }) {
     let cancelled = false;
     setLoading(true); setError(null);
     getDocumentUrls(mrId)
-      .then(d => { if (!cancelled) setDocs(Array.isArray(d) ? d : []); })
+      .then(d => { if (!cancelled) setDocs(Array.isArray(d) ? d : (d?.documents || [])); })
       .catch(err => { if (!cancelled) setError(err.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -137,39 +108,30 @@ function DocSection({ mrId }) {
 // ── Doc Card (thumbnail with lazy blob load) ───────────────────────────────────
 function DocCard({ doc, onPreview }) {
   const [thumbUrl, setThumbUrl] = useState(null);
+  const rawName  = doc.filename || doc.file_name || "document";
+  const fileName = rawName.replace(/^[0-9a-f]{32}_/i, "");
+  const docUrl   = doc.url      || doc.s3_key    || "";
 
   useEffect(() => {
-    if (!isImage(doc.file_name)) return;
-    let revoked = false;
-    fetchDocumentBlob(doc.s3_key)
-      .then(url => { if (!revoked) setThumbUrl(url); })
-      .catch(() => {});
-    return () => {
-      revoked = true;
-      setThumbUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-    };
-  }, [doc.s3_key]);
+    // Use presigned URL directly for thumbnails
+    if (isImage(fileName) && docUrl) setThumbUrl(docUrl);
+  }, [docUrl, fileName]);
 
-  const handleDownload = async () => {
-    try {
-      const url = await fetchDocumentBlob(doc.s3_key);
-      const a = document.createElement("a");
-      a.href = url; a.download = doc.file_name;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch(e) { alert("Download failed: " + e.message); }
+  const handleDownload = () => {
+    if (!docUrl) { alert("Document URL not available"); return; }
+    window.open(docUrl, "_blank");
   };
 
   return (
     <div style={dv.card}>
       <div style={dv.thumbArea} onClick={() => onPreview(doc)}>
-        {isImage(doc.file_name) && thumbUrl
-          ? <img src={thumbUrl} alt={doc.file_name} style={dv.thumb} />
-          : <div style={dv.fileIcon}>{isPdf(doc.file_name) ? "📄" : "📎"}</div>
+        {isImage(fileName) && thumbUrl
+          ? <img src={thumbUrl} alt={fileName} style={dv.thumb} />
+          : <div style={dv.fileIcon}>{isPdf(fileName) ? "📄" : "📎"}</div>
         }
       </div>
-      <div style={dv.docName} title={doc.file_name}>
-        {doc.file_name && doc.file_name.length > 20 ? doc.file_name.slice(0, 18) + "…" : doc.file_name}
+      <div style={dv.docName} title={fileName}>
+        {fileName && fileName.length > 20 ? fileName.slice(0, 18) + "…" : fileName}
       </div>
       <div style={dv.docBtns}>
         <button style={dv.viewBtn} onClick={() => onPreview(doc)}>👁 View</button>

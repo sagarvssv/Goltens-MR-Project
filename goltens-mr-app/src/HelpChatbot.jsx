@@ -100,7 +100,19 @@ async function askClaude(systemPrompt, messages) {
   // Route through our own backend to avoid CORS — backend calls Anthropic API
   const res = await fetch(import.meta.env.VITE_API_ENDPOINT || "/invoke", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(() => {
+        try {
+          const keys = Object.keys(localStorage).filter(k => k.startsWith("oidc.user:"));
+          for (const k of keys) {
+            const parsed = JSON.parse(localStorage.getItem(k) || "{}");
+            if (parsed.id_token) return { "Authorization": `Bearer ${parsed.id_token}` };
+          }
+        } catch(e) {}
+        return {};
+      })(),
+    },
     body: JSON.stringify({
       action: "chatbot_query",
       data: {
@@ -363,15 +375,16 @@ Format AED amounts as AED X,XXX.XX. Show exact numbers from the data.
 Never make up data.
 
 FORMATTING RULES (strictly follow these):
-- Use ### for section headings
-- Use **text** for bold emphasis on key values (MR numbers, amounts, names)
-- When listing multiple MRs or showing comparisons, ALWAYS use a markdown table:
-  | Column1 | Column2 | Column3 |
-  |---------|---------|---------|
-  | value   | value   | value   |
-- Use bullet points (- item) for short lists under 4 items
-- Keep responses concise — no unnecessary filler words
-- For single-answer questions answer in 1-2 lines max
+- Start every response with a brief 1-line summary answer
+- Use ### for section headings (e.g., ### Pending Approvals)
+- Use **text** for bold emphasis on key values (MR numbers, amounts, names, statuses)
+- When listing 3+ MRs or showing comparisons, ALWAYS use a markdown table with clear headers
+- Use bullet points (- item) for lists under 3 items
+- End analytical responses with a ### Summary section with key takeaways
+- Keep responses professional and concise — avoid filler words
+- For single-answer questions: answer in 1-2 lines, no headers needed
+- Always include AED currency prefix for all amounts
+- When referencing MR status use: ✅ APPROVED, ⏳ PENDING, ❌ REJECTED, 📦 IN PROCESS, ✓ ISSUED
 
 ${dataContext}`;
   const extras = {
@@ -408,6 +421,13 @@ You ONLY have data for MRs in APPROVED, IN_PROCESS, or ISSUED status. Data is al
 ALLOWED: pending issuances, issued MRs, daily/weekly counts, items to issue, issued-to details.
 DENIED: If asked about approval history, rejection reasons, manager/HOD decisions, or supply chain internal data - respond:
 "Access Denied - that information is only available in the Manager/HOD/Supply Chain portal. I can only show Warehouse portal data."`,
+
+    sc_manager: `
+FULL ACCESS - SUPPLY CHAIN MANAGER PORTAL:
+You have complete visibility across the supply chain team and all MRs.
+ALLOWED: team performance metrics, individual SC member assignments, pending/in-process/issued MRs, reassignment suggestions, SLA tracking, procurement spend.
+Give specific MR numbers, assigned SC member names, and days elapsed when answering about delays or pending items.
+Help the SC Manager reassign MRs, track team workload, and identify bottlenecks.`,
   };
     return base + (extras[role]||"");
 }

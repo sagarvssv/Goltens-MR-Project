@@ -59,10 +59,10 @@ export default function WarehousePortal({ session, onLogout }) {
   };
 
   useEffect(() => {
-    loadMRs();
+    if(session?.email){ loadMRs();
     const t = setInterval(loadMRs, 120000);
-    return () => clearInterval(t);
-  }, []);
+    return () => clearInterval(t); }
+  }, [session?.email]);
 
   // Auto-select first MR when data loads
   useEffect(() => {
@@ -156,7 +156,7 @@ export default function WarehousePortal({ session, onLogout }) {
           <div style={s.topBar}>
             <SearchBar mrs={mrs} onSelect={mr=>openMR(mr)} placeholder="Search MR, vessel, job…"/>
             <NotificationBell mrs={mrs} role="warehouse" userEmail={session.email} accentColor="#5d4037"
-              onNavigate={mr=>openMR(mr)}/>
+              onNavigate={mr=>{ openMR(mr); setTimeout(()=>window.scrollTo(0,0),100); }}/>
           </div>
           {!selected ? (
             <div style={s.emptyState}>

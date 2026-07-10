@@ -52,7 +52,7 @@ async function call(action, data = {}) {
 // ── Exports ───────────────────────────────────────────────────────────────────
 export const getUserProfile  = (email)                                               => call("get_user_profile",   { email });
 export const getUploadUrl    = (mr_id, filename, file_type)                          => call("get_upload_url",     { mr_id, filename, file_type });
-export const getDocumentUrls = (mr_id)                                               => call("get_document_urls",  { mr_id });
+export const getDocumentUrls = (mr_id)                                               => call("get_document_urls",  { mr_id }).then(r => r?.documents || r || []);
 export const submitMR        = (data)                                                => call("submit_mr",          data);
 export const listMRs         = (status_filter = "ALL")                               => call("list_mrs",           { status_filter }).then(r => Array.isArray(r) ? r : (r.mrs || r || []));
 export const approveMR       = (mr_id, approved_by, comments = "", approver_id = "") => call("approve_mr",         { mr_id, approved_by, comments, approver_id });
@@ -69,10 +69,11 @@ export async function uploadFileToS3(uploadUrl, file) {
 }
 
 export async function fetchDocumentBlob(url) {
-  // Fetch a presigned S3 URL and return as blob for PDF download
+  // Fetch a presigned S3 URL and return as Object URL for preview/download
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch document: ${res.status}`);
-  return res.blob();
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 export const proxyDocument = (s3_key) => call("proxy_document", { s3_key });

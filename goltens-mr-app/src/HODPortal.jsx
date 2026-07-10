@@ -261,11 +261,28 @@ export default function HODPortal({ session, onLogout }) {
   const [selectedFormType, setSelectedFormType] = useState(null);
 
   const loadMRs = async () => {
-    try { const d=await listMRs("ALL"); setMrs(Array.isArray(d)?d:[]); } catch(e){console.error(e);}
+    try {
+      const d = await listMRs("ALL");
+      console.log("loadMRs raw:", JSON.stringify(d).slice(0,200));
+      let arr = [];
+      if (Array.isArray(d)) arr = d;
+      else if (d && Array.isArray(d.mrs)) arr = d.mrs;
+      else if (d && typeof d === 'object') {
+        // Try to find any array in the response
+        const vals = Object.values(d);
+        const found = vals.find(v => Array.isArray(v));
+        if (found) arr = found;
+      }
+      console.log("loadMRs parsed:", arr.length, "MRs");
+      setMrs(arr);
+    } catch(e) {
+      console.error("loadMRs error:", e);
+      setMrs([]);
+    }
     setLoading(false);
   };
 
-  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ if(session?.email){ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); } },[session?.email]);
   useEffect(()=>{ if(selected&&mrs.length>0){ const u=mrs.find(m=>m.mr_id===selected.mr_id); if(u)setSelected(u); } },[mrs]);
 
   const filteredMRs = filterByFormType(mrs, formFilter);
@@ -333,7 +350,7 @@ export default function HODPortal({ session, onLogout }) {
         <div style={s.main}>
           <div style={s.topBar}>
             <SearchBar mrs={mrs} onSelect={mr=>{openMR(mr);setView("queue");}} />
-            <NotificationBell mrs={mrs} role="hod" userEmail={session.email} accentColor={"#4a148c"}/>
+            <NotificationBell mrs={mrs} role="hod" userEmail={session.email} accentColor={"#4a148c"} onNavigate={mr=>{ setSelected(mr); setView("queue"); setTimeout(()=>window.scrollTo(0,0),100); }}/>
           </div>
           {view==="analytics"&&(<div><div style={s.pageTitle}>Project Analytics</div><FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="#4a148c"/><Analytics mrs={filteredMRs}/></div>)}
 

@@ -32,6 +32,8 @@ export default function App() {
   if (auth.user?.id_token) {
     setAuthToken(auth.user.id_token);
   }
+  // Debug: log session role
+  if (session) console.log("Session role:", session.role, "| Email:", session.email);
 
   // Handle logout
   const handleLogout = async () => {

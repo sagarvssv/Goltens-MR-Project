@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { submitMR, getUploadUrl, uploadFileToS3, listMRs } from "./api";
+import { submitMR, getUploadUrl, uploadFileToS3, listMRs, getDocumentUrls } from "./api";
 import GoltensLogo from "./GoltensLogo";
 import MRStageTracker from "./MRStageTracker";
+import MRDetailView from "./MRDetailView";
 import { G } from "./theme";
 import NotificationBell from "./NotificationBell";
 import SLABadge, { getSLADays } from "./SLABadge";
@@ -218,7 +219,7 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={s.roleTag}>👤 {session.name || session.email}</span>
               {onBack && <button style={s.backBtn} onClick={onBack}>← Forms</button>}
-              <NotificationBell mrs={myMRs} role="user" userEmail={session?.email} accentColor={G.primary}/>
+              <NotificationBell mrs={myMRs} role="user" userEmail={session?.email} accentColor={G.primary} onNavigate={mr => { setView("status"); setExpandedMR(mr?.mr_id); }}/>
               <button style={{ ...s.navBtn, ...(view === "form" ? s.navBtnActive : {}) }} onClick={() => setView("form")}>Submit MR</button>
               <button style={{ ...s.navBtn, ...(view === "status" ? s.navBtnActive : {}) }} onClick={() => { setView("status"); loadMyMRs(); }}>My MR Status</button>
             </div>
@@ -251,66 +252,37 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
                   </div>
                 </div>
 
-                {/* Expanded detail */}
+                {/* Expanded detail — full MRDetailView with form + documents */}
                 {expandedMR === mr.mr_id && mr && (
                   <div style={s.mrStatusDetail}>
                     <MRStageTracker status={mr.status} />
                     <SLABadge mr={mr}/>
-                    <button style={{background:G.primary,color:"#fff",border:"none",borderRadius:5,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer",marginBottom:12}} onClick={()=>downloadMRWithDocs(mr)}>⬇ Download PDF</button>
 
-                    {/* Key info */}
-                    <div style={s.detailGrid}>
-                      {[
-                        ["Total Cost", `AED ${parseFloat(mr.total_cost||0).toLocaleString("en-AE",{minimumFractionDigits:2})}`],
-                        ["Date Required", mr.date_required],
-                        ["Department", mr.department||"—"],
-                        ["Approval Level", mr.needs_hod_approval ? "Manager + HOD" : "Manager only"],
-                      ].map(([k,v]) => (
-                        <div key={k} style={s.detailCell}>
-                          <div style={s.detailLabel}>{k}</div>
-                          <div style={s.detailValue}>{v}</div>
-                        </div>
-                      ))}
+                    {/* Action buttons */}
+                    <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+                      <button style={{background:G.primary,color:"#fff",border:"none",borderRadius:5,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}
+                        onClick={()=>downloadMRWithDocs(mr)}>⬇ Download PDF</button>
+                      {mr.status === "PENDING" && (
+                        <button style={{background:G.pale,color:G.navy,border:`1px solid ${G.paleBorder}`,borderRadius:5,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}
+                          onClick={()=>handleEditMR(mr)}>✏ Edit MR</button>
+                      )}
+                      {mr.status === "REJECTED" && (
+                        <button style={{background:"#fff5f5",color:G.danger,border:`1px solid ${G.danger}`,borderRadius:5,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}
+                          onClick={()=>handleResubmit(mr)}>↩ Edit & Resubmit</button>
+                      )}
                     </div>
 
-                    {/* Status messages */}
-                    {mr.status === "PENDING" && (
-                      <div style={s.statusNote}>
-                        📋 Your MR is awaiting Manager review.
-                        <div style={{marginTop:8}}>
-                          <button style={{background:G.pale,color:G.navy,border:`1px solid ${G.paleBorder}`,borderRadius:5,padding:"5px 14px",fontSize:11,fontWeight:600,cursor:"pointer"}}
-                            onClick={()=>handleEditMR(mr)}>
-                            ✏ Edit MR
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {mr.status === "PENDING_HOD" && (
-                      <div style={s.statusNoteHOD}>🔺 Manager approved. Awaiting GM/HOD second-level approval.</div>
-                    )}
-                    {mr.status === "APPROVED" && (
-                      <div style={s.statusNoteOk}>✓ Approved by {mr.hod_approved_by || mr.approved_by || "manager"}. Sent to Supply Chain.</div>
-                    )}
-                    {mr.status === "REJECTED" && (
-                      <div style={s.statusNoteErr}>
-                        ✕ Rejected by {mr.rejected_by}. Reason: {mr.rejection_reason}
-                        <div style={{marginTop:10}}>
-                          <button style={{background:G.primary,color:"#fff",border:"none",borderRadius:5,padding:"6px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}
-                            onClick={()=>handleResubmit(mr)}>
-                            ↩ Edit & Resubmit
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {mr.status === "IN_PROCESS" && (
-                      <div style={s.statusNoteWarn}>⏳ In Process — {mr.inprocess_note}</div>
-                    )}
-                    {mr.status === "ISSUED" && (
-                      <div style={s.statusNoteOk}>✓ Items issued to {mr.warehouse_issued_to_name || "warehouse"}.</div>
-                    )}
-                    {mr.warehouse_collection_comment && (
-                      <div style={s.scNote}>Supply Chain Note: {mr.warehouse_collection_comment}</div>
-                    )}
+                    {/* Status note */}
+                    {mr.status === "PENDING"     && <div style={s.statusNote}>📋 Your MR is awaiting Manager review.</div>}
+                    {mr.status === "PENDING_HOD" && <div style={s.statusNoteHOD}>🔺 Manager approved. Awaiting GM/HOD second-level approval.</div>}
+                    {mr.status === "APPROVED"    && <div style={s.statusNoteOk}>✓ Approved by {mr.hod_approved_by || mr.approved_by || "manager"}. Sent to Supply Chain.</div>}
+                    {mr.status === "REJECTED"    && <div style={s.statusNoteErr}>✕ Rejected by {mr.rejected_by}. Reason: {mr.rejection_reason}</div>}
+                    {mr.status === "IN_PROCESS"  && <div style={s.statusNoteWarn}>⏳ In Process — {mr.inprocess_note}</div>}
+                    {mr.status === "ISSUED"      && <div style={s.statusNoteOk}>✓ Items issued to {mr.warehouse_issued_to_name || "warehouse"}.</div>}
+                    {mr.warehouse_collection_comment && <div style={s.scNote}>Supply Chain Note: {mr.warehouse_collection_comment}</div>}
+
+                    {/* Full form + documents via MRDetailView */}
+                    <MRDetailView mr={mr} showDownload={false} onDownloadPDF={()=>downloadMRWithDocs(mr)} />
                   </div>
                 )}
               </div>

@@ -317,7 +317,7 @@ export default function SCManagerPortal({ session, onLogout }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); }, []);
+  useEffect(() => { if(session?.email){ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); } }, [session?.email]);
 
   const filteredMRs = filterByFormType(mrs, formFilter);
   const overdueBreached = filteredMRs.filter(m => getSLADays(m) !== null);
@@ -393,7 +393,7 @@ export default function SCManagerPortal({ session, onLogout }) {
             <SearchBar mrs={filteredMRs} onSelect={mr=>{setSelected(mr);setView("queue");}} />
             <div style={{marginLeft:"auto"}}>
               <NotificationBell mrs={mrs} role="sc_manager" userEmail={session.email} accentColor="#0d6b4e"
-                onNavigate={mr=>{setSelected(mr);setView("queue");}}/>
+                onNavigate={mr=>{ setSelected(mr); setView("queue"); setTimeout(()=>window.scrollTo(0,0),100); }}/>
             </div>
           </div>
 

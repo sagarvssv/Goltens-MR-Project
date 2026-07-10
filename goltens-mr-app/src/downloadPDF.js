@@ -1,25 +1,75 @@
 /**
  * downloadPDF.js
  * Opens a print-ready window that exactly matches the portal form styling.
- * Page 1 = MR Form, Pages 2+ = Supporting documents.
+ * Page 1 = MR Form, Pages 2+ = Supporting documents (rendered via PDF.js).
  * Font: Inter (professional)
  */
-import { fetchDocumentBlob } from "./api";
+import { getDocumentUrls } from "./api";
+
+// Render PDF pages as base64 images using PDF.js
+async function pdfToImages(pdfUrl) {
+  try {
+    // Load PDF.js from CDN
+    if (!window.pdfjsLib) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+
+    const loadingTask = window.pdfjsLib.getDocument({ url: pdfUrl, withCredentials: false });
+    const pdfDoc = await loadingTask.promise;
+    const images = [];
+
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.8 }); // High quality
+      const canvas = document.createElement("canvas");
+      canvas.width  = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      images.push(canvas.toDataURL("image/jpeg", 0.92));
+    }
+    return images;
+  } catch (e) {
+    console.warn("PDF.js render failed:", e);
+    return null;
+  }
+}
 
 export async function downloadMRWithDocs(mr) {
-  // Fetch all supporting documents as blob URLs
+  // Get presigned URLs and render PDFs as images via PDF.js
   const docBlobs = [];
   if (mr.document_s3_keys && mr.document_s3_keys.length > 0) {
-    for (const key of mr.document_s3_keys) {
-      try {
-        const blobUrl  = await fetchDocumentBlob(key);
-        const filename = key.split("/").slice(-1)[0].split("_").slice(1).join("_");
-        const isPdf    = /\.pdf$/i.test(filename);
-        const isImage  = /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
-        docBlobs.push({ blobUrl, filename, isPdf, isImage });
-      } catch (e) {
-        console.warn("Could not fetch doc:", key, e);
+    try {
+      const docData = await getDocumentUrls(mr.mr_id);
+      const docs = Array.isArray(docData) ? docData : (docData?.documents || []);
+      for (const doc of docs) {
+        try {
+          const url      = doc.url || doc.s3_key || "";
+          const rawName  = doc.filename || doc.file_name || url.split("/").slice(-1)[0].split("?")[0];
+          const filename = rawName.replace(/^[0-9a-f]{32}_/i, "");
+          const isPdf    = /\.pdf$/i.test(filename);
+          const isImage  = /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
+          if (!url) continue;
+          if (isPdf) {
+            const pages = await pdfToImages(url);
+            docBlobs.push({ blobUrl: url, filename, isPdf, isImage, pdfPages: pages });
+          } else {
+            docBlobs.push({ blobUrl: url, filename, isPdf, isImage, pdfPages: null });
+          }
+        } catch (e) {
+          console.warn("Could not process doc:", doc, e);
+        }
       }
+    } catch(e) {
+      console.warn("Could not fetch document URLs:", e);
     }
   }
 
@@ -68,16 +118,19 @@ export async function downloadMRWithDocs(mr) {
         <div class="doc-filename">📎 ${doc.filename}</div>
       </div>
       <div class="doc-content">
-        ${doc.isImage
-          ? `<img src="${doc.blobUrl}" style="max-width:100%;max-height:230mm;object-fit:contain;display:block;margin:0 auto;border-radius:4px"/>`
-          : doc.isPdf
-          ? `<iframe src="${doc.blobUrl}#toolbar=0" style="width:100%;height:245mm;border:1px solid #ddd;border-radius:4px"></iframe>`
-          : `<div class="doc-unsupported">
-               <div style="font-size:48px;margin-bottom:12px">📎</div>
-               <div style="font-size:14px;font-weight:600;color:#333">${doc.filename}</div>
-               <div style="font-size:12px;color:#888;margin-top:8px">This file type cannot be embedded in the PDF preview.</div>
-             </div>`
-        }
+        ${(() => {
+          if (doc.isImage) return '<img src="' + doc.blobUrl + '" style="max-width:100%;max-height:230mm;object-fit:contain;display:block;margin:0 auto;border-radius:4px"/>';
+          if (doc.isPdf && doc.pdfPages && doc.pdfPages.length > 0) {
+            return doc.pdfPages.map((imgData, pi) =>
+              '<div style="width:100%;margin-bottom:8px;text-align:center;">' +
+              '<div style="font-size:11px;color:#888;margin-bottom:4px;">Page ' + (pi+1) + ' of ' + doc.pdfPages.length + '</div>' +
+              '<img src="' + imgData + '" style="width:100%;max-width:190mm;height:auto;display:block;margin:0 auto;border:1px solid #eee;"/>' +
+              '</div>'
+            ).join('');
+          }
+          if (doc.isPdf) return '<div style="text-align:center;padding:40px;background:#f8f9fa;border:2px dashed #ccc;border-radius:4px;"><div style="font-size:48px;margin-bottom:12px">📄</div><div style="font-weight:700;color:#1A3A5C;margin-bottom:8px">' + doc.filename + '</div><a href="' + doc.blobUrl + '" target="_blank" style="background:#1A3A5C;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;">📥 Open PDF</a></div>';
+          return '<div style="text-align:center;padding:40px;background:#f8f9fa;"><div style="font-size:48px;margin-bottom:12px">📎</div><div style="font-size:14px;color:#333">' + doc.filename + '</div></div>';
+        })()}
       </div>
     </div>`).join("");
 
@@ -338,4 +391,6 @@ export async function downloadMRWithDocs(mr) {
   const win = window.open("", "_blank");
   win.document.write(html);
   win.document.close();
+  // PDF.js rendering already done before window opens, just delay for paint
+  win.onload = () => setTimeout(() => { try { win.print(); } catch(e) {} }, 1000);
 }
