@@ -160,9 +160,42 @@ export default function MRDetailView({ mr, onDownloadPDF, showDownload = true })
       <MRStageTracker status={mr.status} />
 
       {/* SC warehouse comment */}
-      {mr.warehouse_collection_comment && (
-        <div style={v.scComment}>
-          <strong>Supply Chain Note:</strong> {mr.warehouse_collection_comment}
+      {/* Processing Info — SC received by, warehouse issued to */}
+      {(mr.sc_received_by_name || mr.warehouse_issued_to_name || mr.warehouse_collection_comment) && (
+        <div style={{ background:"#f0f7ff", border:"1px solid #b3d4f5", borderRadius:8, padding:"12px 16px", marginBottom:12 }}>
+          <div style={{ fontWeight:700, fontSize:12, color:"#1B6CA8", textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:10 }}>
+            📋 Processing Details
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px 16px" }}>
+            {mr.sc_received_by_name && (
+              <div>
+                <div style={{ fontSize:10, color:"#888", fontWeight:600, textTransform:"uppercase" }}>MR Received By (SC)</div>
+                <div style={{ fontSize:13, color:"#1a1a2e", fontWeight:600 }}>{mr.sc_received_by_name}</div>
+                {mr.sc_received_by_id && <div style={{ fontSize:11, color:"#666" }}>ID: {mr.sc_received_by_id}</div>}
+                {mr.sc_received_at && <div style={{ fontSize:11, color:"#888" }}>{new Date(mr.sc_received_at).toLocaleDateString("en-GB", {day:"2-digit",month:"short",year:"numeric"})}</div>}
+              </div>
+            )}
+            {mr.warehouse_issued_to_name && (
+              <div>
+                <div style={{ fontSize:10, color:"#888", fontWeight:600, textTransform:"uppercase" }}>Items Issued To</div>
+                <div style={{ fontSize:13, color:"#1a1a2e", fontWeight:600 }}>{mr.warehouse_issued_to_name}</div>
+                {mr.warehouse_issued_to_id && <div style={{ fontSize:11, color:"#666" }}>ID: {mr.warehouse_issued_to_id}</div>}
+                {mr.issued_at && <div style={{ fontSize:11, color:"#888" }}>{new Date(mr.issued_at).toLocaleDateString("en-GB", {day:"2-digit",month:"short",year:"numeric"})}</div>}
+              </div>
+            )}
+          </div>
+          {mr.warehouse_collection_comment && (
+            <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #b3d4f5" }}>
+              <div style={{ fontSize:10, color:"#888", fontWeight:600, textTransform:"uppercase", marginBottom:4 }}>SC Collection Note</div>
+              <div style={{ fontSize:13, color:"#1a7a4a", lineHeight:1.6, whiteSpace:"pre-wrap", wordBreak:"break-word" }}>{mr.warehouse_collection_comment}</div>
+            </div>
+          )}
+          {mr.warehouse_issue_note && (
+            <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #b3d4f5" }}>
+              <div style={{ fontSize:10, color:"#888", fontWeight:600, textTransform:"uppercase", marginBottom:4 }}>Warehouse Issuance Note</div>
+              <div style={{ fontSize:13, color:"#e65100", lineHeight:1.6, whiteSpace:"pre-wrap", wordBreak:"break-word" }}>{mr.warehouse_issue_note}</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -254,7 +287,7 @@ export default function MRDetailView({ mr, onDownloadPDF, showDownload = true })
           {mr.rejection_reason  && <div style={v.rejectionNote}><strong>Rejection Reason:</strong> {mr.rejection_reason}</div>}
           {mr.inprocess_note    && <div style={v.inprocessNote}><strong>In Process Note:</strong> {mr.inprocess_note}</div>}
           {mr.warehouse_collection_comment && <div style={v.warehouseNote}><strong>Supply Chain Note:</strong> {mr.warehouse_collection_comment}</div>}
-          {mr.warehouse_issue_note && <div style={v.warehouseIssueNote}><strong>Warehouse Note:</strong> {mr.warehouse_issue_note}</div>}
+          {/* warehouse_issue_note shown in Processing Details above */}
 
           <div style={v.copyNote}>
             White — Accounts &nbsp;|&nbsp; Yellow — Purchase &nbsp;|&nbsp; Blue — Originator
@@ -306,7 +339,7 @@ const v = {
   tab:           { background:"none", border:"none", padding:"8px 18px", fontSize:13, cursor:"pointer", color:G.muted, fontWeight:600, borderBottom:"2px solid transparent", marginBottom:-2 },
   tabActive:     { color:G.navy, borderBottom:`2px solid ${G.primary}` },
   dlBtn:         { background:G.primary, color:"#fff", border:"none", borderRadius:5, padding:"6px 16px", fontSize:12, fontWeight:600, cursor:"pointer", marginLeft:"auto" },
-  scComment:     { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:6, padding:"10px 14px", fontSize:13, color:"#1a7a4a", marginBottom:12 },
+  scComment:     { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:6, padding:"12px 16px", fontSize:13, color:"#1a7a4a", marginBottom:12, whiteSpace:"pre-wrap", wordBreak:"break-word", overflowWrap:"break-word" },
   formWrap:      { background:G.white, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"20px 24px" },
   formHeader:    { display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:`2.5px solid ${G.primary}`, paddingBottom:14, marginBottom:16 },
   titleArea:     { textAlign:"right" },
@@ -333,6 +366,6 @@ const v = {
   rejectionNote: { background:"#fff5f5", border:"1px solid #f5c6c6", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#c0392b", marginBottom:8 },
   inprocessNote: { background:"#fff8e1", border:"1px solid #ffe082", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#b8860b", marginBottom:8 },
   warehouseNote:      { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#1a7a4a", marginBottom:8 },
-  warehouseIssueNote: { background:"#fff3e0", border:"1px solid #ffb74d", borderRadius:5, padding:"8px 12px", fontSize:12, color:"#e65100", marginBottom:8 },
+  warehouseIssueNote: { background:"#fff3e0", border:"1px solid #ffb74d", borderRadius:5, padding:"12px 16px", fontSize:13, color:"#e65100", marginBottom:8, whiteSpace:"pre-wrap", wordBreak:"break-word", overflowWrap:"break-word" },
   copyNote:      { fontSize:10, color:G.muted, borderTop:`1px solid ${G.paleBorder}`, paddingTop:8, marginTop:8 },
 };

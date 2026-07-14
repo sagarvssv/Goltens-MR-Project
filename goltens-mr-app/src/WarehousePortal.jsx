@@ -53,7 +53,7 @@ export default function WarehousePortal({ session, onLogout }) {
   const loadMRs = async () => {
     try {
       const all = await listMRs("ALL");
-      setMrs((all||[]).filter(m => ["APPROVED","IN_PROCESS","ISSUED"].includes(m.status)));
+      setMrs((all||[]).filter(m => ["IN_PROCESS","ISSUED"].includes(m.status)));
     } catch(e){ console.error(e); }
     setLoading(false);
   };

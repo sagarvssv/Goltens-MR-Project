@@ -170,8 +170,8 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
       const s3Keys = [];
       for (const file of docFiles) {
         try {
-          const urlData = await getUploadUrl(file.name, file.type, rid);
-          if (urlData?.s3_key) { await uploadFileToS3(urlData.s3_key, file); s3Keys.push(urlData.s3_key); }
+          const urlData = await getUploadUrl(rid, file.name, file.type);
+          if (urlData?.upload_url) { await uploadFileToS3(urlData.upload_url, file); s3Keys.push(urlData.s3_key); }
         } catch (e) { console.warn("Upload failed:", e); }
       }
 
@@ -279,7 +279,12 @@ export default function MRForm({ session, managerEmail, hodEmail, approvalSlab, 
                     {mr.status === "REJECTED"    && <div style={s.statusNoteErr}>✕ Rejected by {mr.rejected_by}. Reason: {mr.rejection_reason}</div>}
                     {mr.status === "IN_PROCESS"  && <div style={s.statusNoteWarn}>⏳ In Process — {mr.inprocess_note}</div>}
                     {mr.status === "ISSUED"      && <div style={s.statusNoteOk}>✓ Items issued to {mr.warehouse_issued_to_name || "warehouse"}.</div>}
-                    {mr.warehouse_collection_comment && <div style={s.scNote}>Supply Chain Note: {mr.warehouse_collection_comment}</div>}
+                    {mr.warehouse_collection_comment && (
+                      <div style={s.scNote}>
+                        <div style={{ fontWeight:700, marginBottom:4, fontSize:11, textTransform:"uppercase" }}>📋 Supply Chain Note</div>
+                        <div style={{ lineHeight:1.6 }}>{mr.warehouse_collection_comment}</div>
+                      </div>
+                    )}
 
                     {/* Full form + documents via MRDetailView */}
                     <MRDetailView mr={mr} showDownload={false} onDownloadPDF={()=>downloadMRWithDocs(mr)} />
@@ -471,7 +476,7 @@ const s = {
   statusNoteOk:   { background:G.successBg, border:"1px solid #a5d6a7", borderRadius:5, padding:"8px 12px", fontSize:12, color:G.success, marginTop:8 },
   statusNoteErr:  { background:G.dangerBg, border:"1px solid #f5c6c6", borderRadius:5, padding:"8px 12px", fontSize:12, color:G.danger, marginTop:8 },
   statusNoteWarn: { background:G.warningBg, border:"1px solid #ffe082", borderRadius:5, padding:"8px 12px", fontSize:12, color:G.warning, marginTop:8 },
-  scNote:         { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:5, padding:"8px 12px", fontSize:12, color:G.success, marginTop:8 },
+  scNote:         { background:"#e8f5e9", border:"1px solid #a5d6a7", borderRadius:5, padding:"12px 16px", fontSize:13, color:G.success, marginTop:8, whiteSpace:"pre-wrap", wordBreak:"break-word", overflowWrap:"break-word" },
   // Form
   purposeSection: { display:"flex", gap:20, marginBottom:20, background:G.pale, border:`1px solid ${G.paleBorder}`, borderRadius:8, padding:"16px 18px" },
   purposeLeft:    { minWidth:160, flexShrink:0 },

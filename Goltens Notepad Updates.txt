@@ -1,13 +1,37 @@
-Goltens:
--------------------------------------------------------------------
-Role		Email					Password
--------------------------------------------------------------------
-User		shashikanth.k@vcloudmaster.com		user123
-Manager		prapul.t@vcloudmaster.com		manager123
-GM/HOD		shashikanth.k@vcloudmaster.com		hod123
-Supply Chain	shashikanth.k@vcloudmaster.com		sc123
+Goltens - Cognito:
+-----------------------------------------------------------------------------
+Role			Email					Password
+-----------------------------------------------------------------------------
+User			britto.nayagam@goltens.com		Goltens@2026
+Manager			pramod.r@goltens.com			Goltens@2026
+GM/HOD			gineesh.kg@goltens.com			Goltens@2026
+Supply Chain		nithya.prabhakar@goltens.com		Goltens@2026
+Supply Chain Manager	girish.malhotra@goltens.com		Goltens@2026
+Warehouse		john.pepset@goltens.com			Goltens@2026
+-----------------------------------------------------------------------------
 
--------------------------------------------------------------------
+To pause email notifications (Run in aws cloudshell):
+
+aws lambda update-function-configuration \
+  --function-name goltens-mr-dispatcher \
+  --region eu-central-1 \
+  --environment "Variables={MR_TABLE=goltens-mr-forms,USERS_TABLE=goltens-users,S3_BUCKET=goltens-mr-documents,SES_SENDER=shashikanth.k@vcloudmaster.com,PORTAL_URL=https://main.d2saycncji94wo.amplifyapp.com,MANAGER_EMAIL=shashikanth.k@vcloudmaster.com,HOD_EMAIL=shashikanth.k@vcloudmaster.com,SC_EMAIL=shashikanth.k@vcloudmaster.com,SC_MGR_EMAIL=shashikanth.k@vcloudmaster.com,WH_EMAIL=shashikanth.k@vcloudmaster.com,PRESIGN_EXPIRY=3600,APPROVAL_SLAB=5000}"
+
+echo "✅ All notifications now go to shashikanth.k@vcloudmaster.com"
+
+------------------------------------------------------------------------------------------------------
+
+To resume email notifications (Run in aws cloudshell):
+
+aws lambda update-function-configuration \
+  --function-name goltens-mr-dispatcher \
+  --region eu-central-1 \
+  --environment "Variables={MR_TABLE=goltens-mr-forms,USERS_TABLE=goltens-users,S3_BUCKET=goltens-mr-documents,SES_SENDER=shashikanth.k@vcloudmaster.com,PORTAL_URL=https://main.d2saycncji94wo.amplifyapp.com,MANAGER_EMAIL=pramod.r@goltens.com,HOD_EMAIL=gineesh.kg@goltens.com,SC_EMAIL=nithya.prabhakar@goltens.com,SC_MGR_EMAIL=girish.malhotra@goltens.com,WH_EMAIL=john.pepset@goltens.com,PRESIGN_EXPIRY=3600,APPROVAL_SLAB=5000}"
+
+echo "✅ All notifications restored to original emails"
+
+------------------------------------------------------------------------------------------------------
+
 Need to set the DynamoDB & SES
 
 1. Job No should be entered manually.
@@ -37,3 +61,117 @@ Need change
 7. In total there should be three different logins to be shown on the website (1. User login, Manager login, Supplychain login)
 8. In all the logins there should be a field of tracking their form status
 9. In the manager portal there should also be an analytical representation as per the projects. That assume if there is a PROJECT-A then the manager should able to see complete info of that project.
+
+30.06.2026
+1. Stage of the form has to be mentioned in the user, manager, HOD portal
+2. To represent a graphical representation in manager and HOD portal for Analytics section.
+3. Add MR to HOD portal also.
+4. Supply chain need to have a full visibility of the form lifecycle.
+
+02.07.2026
+1. There should be an option to remove the attached documents in the user portal.
+2. above 5000AED there should be 2 level approval while the first will be done by the manager and second level will redirect to HOD and this has to be done automatically
+3. Even the user should view his MR status as at which phase it is in detail.
+4. In the warehouse login the warehouse person details should be given above the Issued to field.
+5. Update the logins with different names and email id's. Like user= Shashikanth (shashikanth.k@vcloudmaster.com), manager= Prapul (prapul.t@vcloudmaster.com), HOD= Swapna (swapna.m@vcloudmaster.com), supply chain= Hasini (Hasini.b@vcloudmaster.com), warehouse= Shabeer (shabeer.a@vcloudmaster.com)
+6. I cannot view the supported documents in any of the portal even though attached by the user.
+
+02.07.2026
+1. All the portals should accept the types of supported docs to be viewed
+2. Need to ask gineesh while downloading the form whether he needs in the original form format or as default.
+3. Need to confirm with Gineesh, need to ask whether the signature field should be removed or not.
+4. Need to confirm with Gineesh regarding any serial number of the item to be mentioned or not in the warehouse
+5. Need to receive an email to the user, manager & HOD as soon as he receives the item.
+6. Need to work on the analytics where it is showing only the job no (eg: 12, 145), but it has to show as Jon no: 12, Job no: 145) in this way.
+7. Need to confirm with regarding the logo, whether it is perfect or need to change it. 
+
+03.07.2026
+1. When manager approves then email signature to come as manager, after HOD approves then the signature in the email to come as HOD, same with supply chain and warehouse as well (Do it for all).
+2. Give a help chatbot for all the portals according to their responsibilities and designation.
+3. I have one MR form at this moment so in future there might be additional forms to be added may be upto 20 different forms, so how I need is after logging into the portal they should able to select the form first and then view it and fill it and submit it.
+-------------------------------------------------------------------------------------------------------------------
+1. The user AI chatbot should have the complete information of user forms, MR status, any additional queries regarding the user portal forms or form status(It is according to his responsibilities which he has as a user). Same way the manager, HOD, Supply chain and Warehouse should also have it. As an example if the user asks how many did I submit in last 2days something like that. Same way if the manager wants to ask like how many forms has been submitted by so and so user? How many forms has been submitted in this date range? or what is the amount has been utilised till now? Or how many forms are out of Budget and how many are in Budget?. Same way it has to be for HOD, Supplychain and Warehouse according to their roles and responsibilities.
+2. The multiple forms has to be shown in manager, hod, supply chain & warehouse also. Do it where it is necessary in all portals
+3. Also if the chatbot can be in floating type in the motion always it will be appearing good
+---------------------------------------------------------------------
+1. Getting the connection error when asked any question to the chatbot in all portals.
+2. supplychain portal is not loading
+3. In manager, hod, warehouse the "all forms & Material requisition form is viewed, but also it has to show all the forms till 10 and mention as coming soon
+----------------------------------------
+1. The manager & hod portal chatbots should have an access to all the data that it should able to answer which MR is pending at which stage and what is the issue of delay as well.
+2. In the manager & HOD portal left panel there is an option of submit new MR right? so change it to submit new form and as soon as they click on the submit new form then it should ask as which form you wanted to submit? like MR form or Form1, form2 and so on.
+-------------------------------
+1. In the manager portal when clicked on the submit new form there is blank page coming instead of selecting a form which has to be submitted.
+-------------------------------------------
+1.Need change the font format for the chatbot.
+------------------------------------------
+1. Need to restrict the chatbot data individually according to logins
+-------------------------------------------------------------------------------------------------------
+
+Discuss with Goltens:
+1. Need to ask Goltens team while downloading the form whether he needs in the original form format or as default.
+2. Need to confirm with Goltens team, need to ask whether the signature field should be removed or not.
+3. Need to confirm with Goltens team regarding any serial number of the item to be mentioned or not in the warehouse
+4. Need to confirm with regarding the logo, whether it is perfect or need to change it. 
+5. Need to confirm the format of the form to be downloaded.
+
+------------------------------------
+
+Meeting with Goltens on 06.07.2026
+1. Description field to be given in the User form submission which should be above the fields of vessel, department, jon no, date requested, date required (Mention the side heading as Purpose and a Note box below or side to it for a free text to be entered. This is because to know the purpose of the submission of the form
+2. While downloading the MR form it should also download the supported docs in the single PDF where the form should be in first page and supported documents should be followed by from 2nd page as continuity.
+3. All the approval person's info should be saved in the form. (This is because for 2 level approval's both the manager and HOD approval should be there).
+4. In the Warehouse need to remove the signature & Give a Note field for free text entry.
+5. HOD/GM analytics dashboard there should be an option to able to view the data with Department wise. Also these should be an dropdown to select pending, issued, approved like options to view according to their status.
+6. Supplychain - Additional analytical dashboard required to view the forms according to department wise issued items. Along with Pending wise procurement section to view them which are in that stage.
+7. The downloaded form should be in the same format of the Form submitted.
+8. For this complete solution change the font to a professional looking.
+------------------------------------------
+1. Unable to open the analytics dashboard in HOD portal, manager portal, sc portal.
+2. In the Warehouse need to remove the signature & Give a Note field for free text entry. (This is not done)
+------------------------------------------
+1. In the warehouse login there a note field which has to be filled by warehouse login person, but not by the recepient. After filled and submitted it has to be viewed by the user, manager, hod, sc i.e, according to hierarchy.
+2. In the sc portal sometimes the analytics dashboard going blank.
+3. IN the warehouse when I click on download button, no action is performed.
+4. Also give me a suggestion as the user form cannot see HOD/GM approved field right, so whether it has to be there in that user portal or not.
+5. I need more suggestions where can we enhance this solution more professional or what changes can we make to it or anything which you find much better than existing?
+
+--------------------------------------------------------------------------------------------------------------------------
+Changes which I plan to do by discussing with Vidya sir:
+
+[Need to confirm with Gineesh]: Point 4 — Should HOD/GM approved field show in the user portal?
+Yes, it should. Here's why: the user submitted the MR and needs full transparency on who approved it and at what level. If their MR went through 2-level approval, they should see both "Approved by Manager: Prapul" and "Approved by HOD: Swapna" in their status view. It builds trust and is good governance practice. I'd recommend showing it in the MR Status detail card when the status is PENDING_HOD, APPROVED, or ISSUED.
+
+Point 5 — Enhancement suggestions:
+High value, relatively easy:
+
+MR number search bar — across all portals, a search box to find any MR by ID, vessel, or job number instantly
+Email notifications with HTML — current emails are plain text; styled HTML emails with the Goltens logo would look far more professional
+MR edit/resubmit — allow users to edit and resubmit a rejected MR rather than starting from scratch
+Duplicate MR detection — warn the user if a similar MR (same vessel + job number) was submitted recently
+
+Medium value:
+5. Dashboard home screen for each portal — instead of landing on the queue, show a summary dashboard (pending count, recent activity, quick actions)
+6. Notification bell — in-portal badge showing unread actions (new approval, rejection etc.) without needing to check email
+7. MR print directly from user portal — user can print/download their own submitted MR
+8. Approval SLA tracking — flag MRs that have been pending more than X days with a red badge in all portals
+Deployment-related:
+9. AWS Cognito for authentication — replace the hardcoded credentials with proper user management, password reset, and MFA
+10. CloudWatch alerts — notify admin if the backend goes down or if errors spike
+--------------------------------------------------------------------------------------------------------------------------
+
+1. Supply Chain manager portal need to be created
+2. Analytics chart should be in piechart
+-----------------------------------------------------------------
+1. As soon as the user clicks on notification then it has to go that particular block.
+2. There should be an option of edit for the user after submission of the form. Also additionally if the MR is rejected then he should get an option there itself to resubmit.
+3. Change the SLA to Overdue
+--------------------------------------------------------------------------
+AWS Cognito:
+1. All Login emails are with same password: Goltens@2026
+---------------------------------------------------------------------
+
+
+
+
+

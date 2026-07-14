@@ -42,6 +42,12 @@ export default function SupplyChainPortal({ session, onLogout }) {
   // SC receive form
   const [scName, setScName]     = useState(session?.name || "");
   const [scId,   setScId]       = useState(session?.id_no || "");
+
+  // Sync scName/scId when session loads (in case it wasn't ready on first render)
+  useEffect(() => {
+    if (session?.name  && !scName) setScName(session.name);
+    if (session?.id_no && !scId)   setScId(session.id_no);
+  }, [session?.name, session?.id_no]);
   const [scSig,  setScSig]      = useState("");
   const [whComment, setWhComment] = useState("");
   const [actionMsg, setActionMsg] = useState("");
@@ -55,7 +61,7 @@ export default function SupplyChainPortal({ session, onLogout }) {
     setLoading(false);
   };
 
-  useEffect(()=>{ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); },[]);
+  useEffect(()=>{ if(session?.email){ loadMRs(); const t=setInterval(loadMRs,120000); return()=>clearInterval(t); } },[session?.email]);
 
   const [formFilter, setFormFilter] = useState("all");
   const [scPortalView, setScPortalView] = useState("analytics"); // queue | analytics
@@ -70,10 +76,15 @@ export default function SupplyChainPortal({ session, onLogout }) {
 
   const handleReceive = async () => {
     setActioning(true);
+    // Use session values as fallback if fields are empty
+    const finalName = scName || session?.name || "";
+    const finalId   = scId   || session?.id_no || "";
     const r = await call("sc_receive_mr",{
       mr_id: selected.mr_id,
-      sc_received_by_name: scName,
-      sc_received_by_id: scId,
+      sc_name: finalName,
+      sc_id:   finalId,
+      sc_received_by_name: finalName,
+      sc_received_by_id: finalId,
       sc_received_by_sig: scSig,
       warehouse_collection_comment: whComment,
     });
@@ -142,7 +153,7 @@ export default function SupplyChainPortal({ session, onLogout }) {
             <SearchBar mrs={mrs} onSelect={mr=>{openMR(mr);setScPortalView("queue");}} />
             <div style={{marginLeft:"auto"}}>
               <NotificationBell mrs={mrs} role="supply_chain" userEmail={session.email} accentColor="#0d6b4e"
-                onNavigate={mr=>{openMR(mr);setScPortalView("queue");}}/>
+                onNavigate={mr=>{ openMR(mr); setScPortalView("queue"); setTimeout(()=>window.scrollTo(0,0),100); }}/>
             </div>
           </div>
           {scPortalView==="analytics" && (
