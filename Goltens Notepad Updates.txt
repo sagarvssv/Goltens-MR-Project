@@ -170,8 +170,11 @@ Deployment-related:
 AWS Cognito:
 1. All Login emails are with same password: Goltens@2026
 ---------------------------------------------------------------------
+13.07.2026 (Meeting with the client)
 
-
+1. After approval of form in SC portal, only then Warehouse should receive the form
+2. Full comment of the supplychain warehouse note should be visible in user, manager & HOD portals.
+3. In supplychain portal below the form under the Supplychain action field, the Signature should be replaced with the Dropdown.
 
 
 
