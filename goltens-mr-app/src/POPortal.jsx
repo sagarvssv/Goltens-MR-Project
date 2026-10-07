@@ -270,7 +270,7 @@ export default function POPortal({ session, onLogout, role, onNavigate }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <NotificationBell session={session} onNavigate={onNavigate} />
+          <NotificationBell mrs={[]} role={role} userEmail={session?.email} accentColor="#1B6CA8" onNavigate={onNavigate} />
           <button onClick={onLogout} style={{ background: "none", border: "1px solid #ddd", borderRadius: 7, padding: "6px 14px", cursor: "pointer", fontSize: 13, color: "#666" }}>
             Logout
           </button>
