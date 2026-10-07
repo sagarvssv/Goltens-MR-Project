@@ -33,7 +33,7 @@ async function call(action, data={}) {
 }
 
 
-export default function SupplyChainPortal({ session, onLogout }) {
+export default function SupplyChainPortal({ session, onLogout, onNavigate }) {
   const [mrs, setMrs]           = useState([]);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null);
@@ -129,6 +129,14 @@ export default function SupplyChainPortal({ session, onLogout }) {
             </div>
           </div>
           <div style={{padding:"0 12px 4px"}}><FormTypeFilter mrs={mrs} selected={formFilter} onChange={setFormFilter} accentColor="rgba(255,255,255,0.9)" compact/></div>
+          <div style={s.sideSection}>MODULES</div>
+          <div style={{padding:"0 12px 8px"}}>
+            <button onClick={() => onNavigate && onNavigate("po")}
+              style={{width:"100%", padding:"8px", borderRadius:7, border:"1px solid rgba(255,255,255,0.3)",
+                background:"#1a5276", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer"}}>
+              📤 Upload PO
+            </button>
+          </div>
           <div style={s.sideSection}>MR QUEUE</div>
           {loading && <div style={s.sideLoading}>Loading…</div>}
           {!loading && filteredMRs.length===0 && <div style={s.sideLoading}>No MRs assigned.</div>}

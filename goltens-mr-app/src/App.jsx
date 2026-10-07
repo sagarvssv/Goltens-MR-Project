@@ -8,13 +8,14 @@ import SupplyChainPortal from "./SupplyChainPortal";
 import HODPortal from "./HODPortal";
 import WarehousePortal from "./WarehousePortal";
 import SCManagerPortal from "./SCManagerPortal";
+import POPortal from "./POPortal";
 import FormSelector from "./FormSelector";
 import GoltensLogo from "./GoltensLogo";
 import { G } from "./theme";
 
-export const MANAGER_EMAIL   = "pramod.r@goltens.com";
+export const MANAGER_EMAIL   = "febian.kelu@goltens.com";
 export const HOD_EMAIL       = "gineesh.kg@goltens.com";
-export const SC_EMAIL        = "nithya.prabhakar@goltens.com";
+export const SC_EMAIL        = "sajith.pt@goltens.com";
 export const SC_MGR_EMAIL    = "girish.malhotra@goltens.com";
 export const APPROVAL_SLAB   = 5000;
 export const SLA_PENDING     = 2;
@@ -24,22 +25,21 @@ export const SLA_APPROVED    = 5;
 export default function App() {
   const auth                                  = useAuth();
   const [selectedForm, setSelectedForm]       = useState(null);
+  const [portalView, setPortalView]           = useState("mr"); // "mr" | "po"
 
-  // Extract session from Cognito user
   const session = extractSession(auth.user);
 
-  // Set auth token for API calls whenever user changes
   if (auth.user?.id_token) {
     setAuthToken(auth.user.id_token);
   }
-  // Debug: log session role
   if (session) console.log("Session role:", session.role, "| Email:", session.email);
 
-  // Handle logout
   const handleLogout = async () => {
     await auth.removeUser();
     cognitoLogout(window.location.origin);
   };
+
+  const handleNavigate = (view) => setPortalView(view);
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (auth.isLoading) {
@@ -71,7 +71,6 @@ export default function App() {
 
   // ── Authenticated ─────────────────────────────────────────────────────────
   if (auth.isAuthenticated && session) {
-    // Role not set — show error
     if (!session.role) {
       return (
         <div style={s.loadPage}>
@@ -91,12 +90,26 @@ export default function App() {
       );
     }
 
-    // Route to portal based on role
-    if (session.role === "manager")      return <ManagerPortal     session={session} onLogout={handleLogout}/>;
-    if (session.role === "supply_chain") return <SupplyChainPortal session={session} onLogout={handleLogout}/>;
-    if (session.role === "hod")          return <HODPortal          session={session} onLogout={handleLogout}/>;
-    if (session.role === "warehouse")    return <WarehousePortal    session={session} onLogout={handleLogout}/>;
-    if (session.role === "sc_manager")   return <SCManagerPortal    session={session} onLogout={handleLogout}/>;
+    // SC Staff — MR portal + PO upload portal
+    if (session.role === "supply_chain") {
+      if (portalView === "po") {
+        return <POPortal session={session} onLogout={handleLogout} role="supply_chain" onNavigate={handleNavigate}/>;
+      }
+      return <SupplyChainPortal session={session} onLogout={handleLogout} onNavigate={handleNavigate}/>;
+    }
+
+    // SC Manager — MR portal + PO approval portal
+    if (session.role === "sc_manager") {
+      if (portalView === "po") {
+        return <POPortal session={session} onLogout={handleLogout} role="sc_manager" onNavigate={handleNavigate}/>;
+      }
+      return <SCManagerPortal session={session} onLogout={handleLogout} onNavigate={handleNavigate}/>;
+    }
+
+    // Other roles
+    if (session.role === "manager")   return <ManagerPortal  session={session} onLogout={handleLogout}/>;
+    if (session.role === "hod")       return <HODPortal       session={session} onLogout={handleLogout}/>;
+    if (session.role === "warehouse") return <WarehousePortal session={session} onLogout={handleLogout}/>;
 
     if (session.role === "user") {
       if (!selectedForm) {

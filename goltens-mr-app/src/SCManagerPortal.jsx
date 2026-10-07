@@ -298,7 +298,7 @@ function SCAllStatus({ mrs, onOpen }) {
   );
 }
 
-export default function SCManagerPortal({ session, onLogout }) {
+export default function SCManagerPortal({ session, onLogout, onNavigate }) {
   const [view, setView]         = useState("dashboard");
   const [mrs, setMrs]           = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -373,6 +373,12 @@ export default function SCManagerPortal({ session, onLogout }) {
               {label}
             </div>
           ))}
+
+          <div style={s.sideSection}>MODULES</div>
+          <div style={{...s.navItem, background:"#1a5276", border:"1px solid rgba(255,255,255,0.3)", borderRadius:8, margin:"4px 12px", fontWeight:700}}
+            onClick={() => onNavigate && onNavigate("po")}>
+            📄 PO Approvals
+          </div>
 
           <div style={s.sideSection}>QUICK QUEUE</div>
           {loading && <div style={s.sideLoading}>Loading…</div>}
